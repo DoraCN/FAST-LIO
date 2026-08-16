@@ -11,6 +11,8 @@ pub mod data_source;
 pub mod esekf;
 pub mod ikdtree;
 pub mod imu_processing;
+#[cfg(feature = "live")]
+pub mod livox;
 pub mod laser_mapping;
 pub mod math;
 pub mod model;

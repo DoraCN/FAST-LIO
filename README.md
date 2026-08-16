@@ -32,6 +32,7 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
   - **ikd-Tree** — incremental k-d tree with lazy deletion, box deletion, downsampled insertion, subtree rebalancing and O(log n) k-NN search.
   - **Mapping** — FOV-based sliding local map, voxel-grid downsampling and incremental map update.
 - Zero IO in the core crate — `no_std`-friendly architecture (currently `std` only), no ROS, no PCL.
+- **Live Livox support (no ROS)** — an optional `live` feature connects directly to HAP / Mid-360 LiDARs through the official Livox SDK2 (via the `livox-sdk2` crate) and streams point clouds + the built-in IMU into the pipeline.
 - Numerically faithful port, verified against the C++ implementation module by module (see [Testing](#testing)).
 - Workspace-ready for the full autonomy stack: `lidar-map` (occupancy/voxel map) and `lidar-nav` (planning/navigation) crates are reserved.
 
@@ -47,6 +48,7 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
 | ikd-Tree | `src/ikdtree.rs` | ✅ brute-force cross-checked |
 | Laser-mapping main loop | `src/laser_mapping.rs` | ✅ end-to-end |
 | Offline driver + synthetic data source | `crates/fast-lio-app` | ✅ end-to-end |
+| Live Livox SDK2 source (`live` feature) | `src/livox.rs` | ✅ builds (needs hardware to verify) |
 | Real-dataset validation (C++ golden comparison) | — | 🔜 pending dataset |
 | `lidar-map` / `lidar-nav` | — | 🔜 planned |
 
@@ -80,10 +82,13 @@ Requirements: stable Rust ≥ 1.85 (edition 2024).
 
 ```bash
 # run the offline demo (synthetic circular trajectory, IMU 200 Hz + LiDAR 10 Hz, 20 s)
-cargo run -p fast-lio-app --release
+cargo run -p fast-lio-app --release -- --sim
 
-# results are written to ./out by default (or pass a directory)
-cargo run -p fast-lio-app --release my_output
+# run on a real Livox LiDAR (no ROS) — direct SDK2 connection
+cargo run -p fast-lio-app --release -- --live /path/to/mid360_config.json
+
+# results are written to ./out by default (or pass --out <dir>)
+cargo run -p fast-lio-app --release -- --sim --out my_output
 ```
 
 The demo drives the whole pipeline with the built-in `SimSource` and produces:
@@ -154,6 +159,28 @@ The pipeline is configured through [`LioConfig`](crates/fast-lio/src/laser_mappi
 - **`DataSource`** — the trait implemented by any input (rosbag reader, file, socket…). Samples must be time-ordered.
 - **`SimSource`** — a deterministic synthetic generator (static initialization phase followed by circular motion over wall/ground planes). Used by the demo and for CI-style smoke tests; not a replacement for real-data validation.
 
+### Real device — Livox via SDK2 (no ROS)
+
+With the `live` feature (enabled by default in `fast-lio-app`), `fast_lio::livox::LivoxSource`
+connects **directly to the LiDAR over the network**, no ROS involved:
+
+```bash
+cargo run -p fast-lio-app --release -- --live mid360_config.json [--scan-ms 100]
+```
+
+Requirements and notes:
+
+- A **valid Livox config file** (`mid360_config.json`, the same file used by Livox Viewer / driver2)
+  listing the device IP / subnet. The SDK2 `Sdk::new` aborts on a missing/malformed file.
+- The target machine needs `cmake` and a C++ compiler (the crate vendors and builds the official SDK2).
+- Supported devices: **HAP / Mid-360** (SDK2). The older Avia SDK1 line is not covered.
+- The pipeline runs in **direct odometry mode** (`feature_extract_enable = false`): the SDK2 stream is
+  routed through a single scan line because per-point ring indices are not exposed by the SDK.
+- Units: points are in meters; IMU gyro in rad/s; IMU accel is converted from **g** to m/s²
+  (`ACC_G_TO_MPS2` in `src/livox.rs` — set to `1.0` if your firmware reports m/s² directly).
+- Frame timestamps use a local monotonic clock (arrival time). If you need the device PTP/UTC
+  timestamps for exact synchronization, `Packet::timestamp()` is exposed for that.
+
 ## Outputs
 
 The offline app writes, per run:
@@ -190,10 +217,11 @@ End-to-end: the `fast-lio-app` demo processes ~200 frames of synthetic data and 
 ## Roadmap
 
 1. Real-dataset validation against the C++ implementation (trajectory ATE/RPE, per-stage golden comparison).
-2. `DataSource` implementations for rosbag / custom files.
-3. `lidar-map`: incremental occupancy / voxel map for planning.
-4. `lidar-nav`: path planning and obstacle avoidance on top of the map.
-5. Publish `fast-lio` (and later `lidar-map`, `lidar-nav`) to crates.io.
+2. Verify `LivoxSource` on hardware; switch to PTP/UTC timestamps for tighter sync.
+3. `DataSource` implementations for rosbag / custom files.
+4. `lidar-map`: incremental occupancy / voxel map for planning.
+5. `lidar-nav`: path planning and obstacle avoidance on top of the map.
+6. Publish `fast-lio` (and later `lidar-map`, `lidar-nav`) to crates.io.
 
 ## Attribution & license
 

@@ -1,46 +1,119 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::time::Duration;
 
 use fast_lio::consts::G_M_S2;
 use fast_lio::data_source::{DataSource, SimParams, SimSource};
 use fast_lio::laser_mapping::{LaserMapping, LioConfig, LioResult};
 use fast_lio::types::{LidarType, SensorData, TimeUnit};
 
+#[cfg(feature = "live")]
+use fast_lio::livox::LivoxSource;
+
+fn usage() -> ! {
+    eprintln!(
+        "usage: fast-lio-app [--out <dir>] [--sim] | [--live <config.json> [--scan-ms <ms>]]\n\
+         \n\
+         modes:\n\
+         \x20 --sim                    synthetic demo data (default)\n\
+         \x20 --live <config.json>     connect to a Livox LiDAR via the SDK2 (no ROS)\n\
+         \x20   --scan-ms <ms>         scan frame period in ms (default 100)\n\
+         \x20 --out <dir>              output directory (default \"out\")"
+    );
+    std::process::exit(2);
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let out_dir = args
-        .get(1)
-        .cloned()
-        .unwrap_or_else(|| "out".to_string());
+    let mut out_dir = "out".to_string();
+    let mut live_config: Option<String> = None;
+    let mut scan_ms: f64 = 100.0;
+    let mut sim = false;
+
+    let mut args = std::env::args().skip(1);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--out" => out_dir = args.next().unwrap_or_else(|| usage()),
+            "--sim" => sim = true,
+            "--live" => live_config = Some(args.next().unwrap_or_else(|| usage())),
+            "--scan-ms" => scan_ms = args.next().unwrap_or_else(|| usage()).parse().unwrap_or_else(|_| usage()),
+            _ => usage(),
+        }
+    }
+    if live_config.is_some() && sim {
+        usage();
+    }
     std::fs::create_dir_all(&out_dir).expect("create output dir");
 
-    let cfg = LioConfig {
-        lidar_type: LidarType::Velo16,
-        feature_extract_enable: false,
-        point_filter_num: 2,
-        n_scans: 16,
-        timestamp_unit: TimeUnit::Ms,
-        filter_size_surf: 0.5,
-        filter_size_map: 0.5,
-        gyr_cov: 0.1,
-        acc_cov: 0.1,
-        b_gyr_cov: 0.0001,
-        b_acc_cov: 0.0001,
-        ..Default::default()
+    // ---- pipeline configuration -----------------------------------------
+    let cfg = if live_config.is_some() {
+        // Direct odometry mode (no feature extraction): robust for Livox and
+        // required here because the SDK2 stream is routed through a single scan
+        // line (no per-point ring information).
+        LioConfig {
+            lidar_type: LidarType::Avia,
+            feature_extract_enable: false,
+            point_filter_num: 2,
+            n_scans: 6,
+            scan_rate: 10,
+            timestamp_unit: TimeUnit::Us,
+            filter_size_surf: 0.5,
+            filter_size_map: 0.5,
+            gyr_cov: 0.1,
+            acc_cov: 0.1,
+            b_gyr_cov: 0.0001,
+            b_acc_cov: 0.0001,
+            ..Default::default()
+        }
+    } else {
+        // synthetic demo: spinning-lidar style data
+        LioConfig {
+            lidar_type: LidarType::Velo16,
+            feature_extract_enable: false,
+            point_filter_num: 2,
+            n_scans: 16,
+            timestamp_unit: TimeUnit::Ms,
+            filter_size_surf: 0.5,
+            filter_size_map: 0.5,
+            gyr_cov: 0.1,
+            acc_cov: 0.1,
+            b_gyr_cov: 0.0001,
+            b_acc_cov: 0.0001,
+            ..Default::default()
+        }
+    };
+
+    // ---- data source ----------------------------------------------------
+    let mut source: Box<dyn DataSource> = if let Some(config) = live_config {
+        #[cfg(feature = "live")]
+        {
+            println!("connecting to Livox device via SDK2 (config: {config}) ...");
+            Box::new(
+                LivoxSource::connect(&config, Duration::from_secs_f64(scan_ms / 1000.0))
+                    .expect("Livox SDK init failed — check the config file and the network"),
+            )
+        }
+        #[cfg(not(feature = "live"))]
+        {
+            let _ = config;
+            eprintln!("binary built without the `live` feature");
+            usage();
+        }
+    } else {
+        let _ = scan_ms;
+        let sim = SimParams {
+            imu_hz: 200.0,
+            lidar_hz: 10.0,
+            duration: 20.0,
+            radius: 5.0,
+            omega: 0.15,
+            height: 1.0,
+            points_per_scan: 1500,
+            ..Default::default()
+        };
+        Box::new(SimSource::new(&sim))
     };
 
     let mut mapping = LaserMapping::new(&cfg);
-    let sim = SimParams {
-        imu_hz: 200.0,
-        lidar_hz: 10.0,
-        duration: 20.0,
-        radius: 5.0,
-        omega: 0.15,
-        height: 1.0,
-        points_per_scan: 1500,
-        ..Default::default()
-    };
-    let mut source = SimSource::new(&sim);
 
     let mut results: Vec<LioResult> = Vec::new();
     let mut n_sensor = 0u64;
@@ -64,7 +137,9 @@ fn main() {
         }
     }
 
-    println!("sensor samples: {n_sensor}, processed frames: {n_frames}, skipped: {n_skipped}");
+    println!(
+        "sensor samples: {n_sensor}, processed frames: {n_frames}, skipped: {n_skipped}"
+    );
 
     // write trajectory (pos_log format, similar to the C++ node)
     let traj_path = format!("{out_dir}/pos_log.txt");
@@ -99,16 +174,22 @@ fn main() {
             writeln!(w, "{} {} {}", p.x, p.y, p.z).expect("write map");
         }
     }
-    println!("map -> {map_path} ({} points)", mapping.ikdtree.pcl_storage.len());
+    println!(
+        "map -> {map_path} ({} points)",
+        mapping.ikdtree.pcl_storage.len()
+    );
 
     // print a few sanity numbers
     if let Some(last) = results.last() {
-        let r = last.pos.norm();
         println!(
             "final pos=({:.2},{:.2},{:.2}) |pos|={:.2}, map points={}, res_mean={:.4}",
-            last.pos[0], last.pos[1], last.pos[2], r, last.map_points, last.res_mean
+            last.pos[0],
+            last.pos[1],
+            last.pos[2],
+            last.pos.norm(),
+            last.map_points,
+            last.res_mean
         );
-        println!("gravity = 9.81 (ref)");
         let _ = G_M_S2;
     }
 }

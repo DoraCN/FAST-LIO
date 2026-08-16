@@ -6,5 +6,9 @@ license.workspace = true
 description = "Offline driver application for FAST-LIO (not published to crates.io)"
 publish = false
 
+[features]
+default = ["live"]
+live = ["fast-lio/live"]
+
 [dependencies]
-fast-lio = { path = "../fast-lio" }
+fast-lio = { path = "../fast-lio", features = ["live"] }

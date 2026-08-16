@@ -5,5 +5,11 @@ edition.workspace = true
 license.workspace = true
 description.workspace = true
 
+[features]
+default = []
+# Live Livox devices (HAP / Mid-360) via the Livox SDK2 (no ROS required).
+live = ["dep:livox-sdk2"]
+
 [dependencies]
 nalgebra.workspace = true
+livox-sdk2 = { version = "0.1", optional = true }
