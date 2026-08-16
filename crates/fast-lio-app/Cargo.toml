@@ -1,0 +1,10 @@
+[package]
+name = "fast-lio-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Offline driver application for FAST-LIO (not published to crates.io)"
+publish = false
+
+[dependencies]
+fast-lio = { path = "../fast-lio" }

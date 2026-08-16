@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/fast-lio",
+    "crates/lidar-map",
+    "crates/lidar-nav",
+    "crates/fast-lio-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Rust port of FAST-LIO: fast LiDAR-inertial odometry"
+
+[workspace.dependencies]
+nalgebra = "0.33"
+rayon = "1.10"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
