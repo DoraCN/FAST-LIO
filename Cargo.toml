@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/fast-lio",
+    "crates/fast-lio-driver",
     "crates/lidar-map",
     "crates/lidar-nav",
     "crates/fast-lio-app",

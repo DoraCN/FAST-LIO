@@ -32,7 +32,8 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
   - **ikd-Tree** — incremental k-d tree with lazy deletion, box deletion, downsampled insertion, subtree rebalancing and O(log n) k-NN search.
   - **Mapping** — FOV-based sliding local map, voxel-grid downsampling and incremental map update.
 - Zero IO in the core crate — `no_std`-friendly architecture (currently `std` only), no ROS, no PCL.
-- **Live Livox support (no ROS)** — an optional `live` feature connects directly to HAP / Mid-360 LiDARs through the official Livox SDK2 (via the `livox-sdk2` crate) and streams point clouds + the built-in IMU into the pipeline.
+- **Decoupled driver layer** — all hardware access lives in the `fast-lio-driver` crate (one module per brand, heavy vendor SDKs feature-gated); the algorithm core never sees a vendor SDK.
+- **Live Livox support (no ROS)** — `fast-lio-driver` connects directly to HAP / Mid-360 LiDARs through the official Livox SDK2 (via the `livox-sdk2` crate) and streams point clouds + the built-in IMU into the pipeline.
 - Numerically faithful port, verified against the C++ implementation module by module (see [Testing](#testing)).
 - Workspace-ready for the full autonomy stack: `lidar-map` (occupancy/voxel map) and `lidar-nav` (planning/navigation) crates are reserved.
 
@@ -48,7 +49,7 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
 | ikd-Tree | `src/ikdtree.rs` | ✅ brute-force cross-checked |
 | Laser-mapping main loop | `src/laser_mapping.rs` | ✅ end-to-end |
 | Offline driver + synthetic data source | `crates/fast-lio-app` | ✅ end-to-end |
-| Live Livox SDK2 source (`live` feature) | `src/livox.rs` | ✅ builds (needs hardware to verify) |
+| Live Livox SDK2 source (`livox-sdk2` feature) | `crates/fast-lio-driver/src/livox.rs` | ✅ builds (needs hardware to verify) |
 | Real-dataset validation (C++ golden comparison) | — | 🔜 pending dataset |
 | `lidar-map` / `lidar-nav` | — | 🔜 planned |
 
@@ -68,13 +69,24 @@ fast-lio/
     │       ├── ikdtree.rs     #   incremental k-d tree
     │       ├── laser_mapping.rs # main pipeline
     │       ├── data_source.rs #   DataSource trait + synthetic simulator
-    │       └── types.rs
+    │       └── types.rs       #   normalized SensorData messages
+    ├── fast-lio-driver/       # device adapters (one module per brand)
+    │   └── src/
+    │       ├── lib.rs         #   DriverParams + open() factory
+    │       ├── livox.rs       #   Livox SDK2 (feature: livox-sdk2)
+    │       ├── velodyne.rs    #   spinning LiDAR (WIP)
+    │       ├── ouster.rs      #   spinning LiDAR (WIP)
+    │       └── hesai.rs       #   spinning LiDAR (WIP)
     ├── lidar-map/             # (placeholder) occupancy / voxel map — future
     ├── lidar-nav/             # (placeholder) planning & navigation — future
     └── fast-lio-app/          # offline driver binary (not published)
 ```
 
-Dependency direction: `lidar-map → fast-lio`, `lidar-nav → lidar-map`, `fast-lio-app → fast-lio`.
+The algorithm core (`fast-lio`) is **vendor-SDK-free**: it only consumes the
+normalized [`SensorData`](crates/fast-lio/src/types.rs). All hardware access
+lives in `fast-lio-driver`, whose adapters translate each brand's raw output
+into that format. Dependency direction: `fast-lio-app → fast-lio-driver →
+fast-lio`.
 
 ## Quick start
 
@@ -161,8 +173,8 @@ The pipeline is configured through [`LioConfig`](crates/fast-lio/src/laser_mappi
 
 ### Real device — Livox via SDK2 (no ROS)
 
-With the `live` feature (enabled by default in `fast-lio-app`), `fast_lio::livox::LivoxSource`
-connects **directly to the LiDAR over the network**, no ROS involved:
+With the `livox-sdk2` feature (enabled by default in `fast-lio-app`), the
+`fast-lio-driver` crate connects **directly to the LiDAR over the network**, no ROS involved:
 
 ```bash
 cargo run -p fast-lio-app --release -- --live mid360_config.json [--scan-ms 100]
@@ -177,7 +189,7 @@ Requirements and notes:
 - The pipeline runs in **direct odometry mode** (`feature_extract_enable = false`): the SDK2 stream is
   routed through a single scan line because per-point ring indices are not exposed by the SDK.
 - Units: points are in meters; IMU gyro in rad/s; IMU accel is converted from **g** to m/s²
-  (`ACC_G_TO_MPS2` in `src/livox.rs` — set to `1.0` if your firmware reports m/s² directly).
+  (`ACC_G_TO_MPS2` in `crates/fast-lio-driver/src/livox.rs` — set to `1.0` if your firmware reports m/s² directly).
 - Frame timestamps use a local monotonic clock (arrival time). If you need the device PTP/UTC
   timestamps for exact synchronization, `Packet::timestamp()` is exposed for that.
 

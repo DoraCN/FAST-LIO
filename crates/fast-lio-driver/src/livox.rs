@@ -19,7 +19,7 @@
 //! - The target machine must be able to build the vendored SDK2 C++ sources
 //!   (cmake + a C++ compiler), and be on the same network as the LiDAR.
 
-#![cfg(feature = "live")]
+#![cfg(feature = "livox-sdk2")]
 
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -27,8 +27,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use livox_sdk2::{Packet, Sdk};
 
-use crate::data_source::DataSource;
-use crate::types::{AviaMsg, AviaPointMsg, ImuRaw, SensorData};
+use fast_lio::data_source::DataSource;
+use fast_lio::types::{AviaMsg, AviaPointMsg, ImuRaw, SensorData};
 
 /// Convert the SDK2 IMU accel (g) into m/s². Set to `1.0` if the device
 /// reports m/s² directly.

@@ -7,8 +7,9 @@ description = "Offline driver application for FAST-LIO (not published to crates.
 publish = false
 
 [features]
-default = ["live"]
-live = ["fast-lio/live"]
+default = ["livox-sdk2"]
+livox-sdk2 = ["fast-lio-driver/livox-sdk2"]
 
 [dependencies]
-fast-lio = { path = "../fast-lio", features = ["live"] }
+fast-lio = { path = "../fast-lio" }
+fast-lio-driver = { path = "../fast-lio-driver", features = ["livox-sdk2"] }

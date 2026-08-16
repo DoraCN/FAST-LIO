@@ -1,0 +1,16 @@
+[package]
+name = "fast-lio-driver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Driver adapters for LiDAR + IMU data sources feeding the fast-lio core"
+
+[features]
+default = []
+# Livox SDK2 (HAP / Mid-360): vendors and builds the official C++ SDK.
+# Isolated behind a feature because it requires a C++ toolchain + cmake.
+livox-sdk2 = ["dep:livox-sdk2"]
+
+[dependencies]
+fast-lio = { path = "../fast-lio" }
+livox-sdk2 = { version = "0.1", optional = true }

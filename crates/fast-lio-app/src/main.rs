@@ -2,13 +2,10 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::time::Duration;
 
-use fast_lio::consts::G_M_S2;
 use fast_lio::data_source::{DataSource, SimParams, SimSource};
 use fast_lio::laser_mapping::{LaserMapping, LioConfig, LioResult};
 use fast_lio::types::{LidarType, SensorData, TimeUnit};
-
-#[cfg(feature = "live")]
-use fast_lio::livox::LivoxSource;
+use fast_lio_driver::{open, DriverParams};
 
 fn usage() -> ! {
     eprintln!(
@@ -84,20 +81,10 @@ fn main() {
 
     // ---- data source ----------------------------------------------------
     let mut source: Box<dyn DataSource> = if let Some(config) = live_config {
-        #[cfg(feature = "live")]
-        {
-            println!("connecting to Livox device via SDK2 (config: {config}) ...");
-            Box::new(
-                LivoxSource::connect(&config, Duration::from_secs_f64(scan_ms / 1000.0))
-                    .expect("Livox SDK init failed — check the config file and the network"),
-            )
-        }
-        #[cfg(not(feature = "live"))]
-        {
-            let _ = config;
-            eprintln!("binary built without the `live` feature");
-            usage();
-        }
+        println!("connecting to Livox device via SDK2 (config: {config}) ...");
+        let params = DriverParams::livox(config, Duration::from_secs_f64(scan_ms / 1000.0));
+        open(&params)
+            .expect("failed to open the lidar driver — check the config file and the network")
     } else {
         let _ = scan_ms;
         let sim = SimParams {
@@ -190,7 +177,6 @@ fn main() {
             last.map_points,
             last.res_mean
         );
-        let _ = G_M_S2;
     }
 }
 

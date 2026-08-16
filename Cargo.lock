@@ -104,7 +104,6 @@ checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
 name = "fast-lio"
 version = "0.1.0"
 dependencies = [
- "livox-sdk2",
  "nalgebra",
 ]
 
@@ -113,6 +112,15 @@ name = "fast-lio-app"
 version = "0.1.0"
 dependencies = [
  "fast-lio",
+ "fast-lio-driver",
+]
+
+[[package]]
+name = "fast-lio-driver"
+version = "0.1.0"
+dependencies = [
+ "fast-lio",
+ "livox-sdk2",
 ]
 
 [[package]]
