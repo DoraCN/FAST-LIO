@@ -3,6 +3,8 @@
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 [![edition](https://img.shields.io/badge/edition-2024-orange)](Cargo.toml)
 
+**Languages:** English · [简体中文](README_zh.md)
+
 **fast-lio** is a pure-Rust, dependency-light port of [FAST-LIO2](https://github.com/hku-mars/FAST_LIO) — a computationally efficient, robust tightly-coupled LiDAR-inertial odometry (LIO) system. It fuses raw LiDAR points with IMU data using an iterated error-state Kalman filter (IEKF) on a manifold and maintains an incremental k-d tree (ikd-Tree) map, enabling accurate, drift-bounded odometry and mapping at high rates.
 
 The core crate contains **no I/O or ROS dependencies**: the whole front-end is a plain library that consumes timestamped IMU samples and LiDAR scans and produces poses, velocity, biases and the local map. This makes it easy to embed, unit-test, and drive from any data source (rosbag, custom file format, live sensors).
@@ -12,9 +14,11 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
 - [Features](#features)
 - [Status](#status)
 - [Workspace layout](#workspace-layout)
+- [Requirements](#requirements)
 - [Quick start](#quick-start)
-- [Library usage](#library-usage)
+- [Command line reference](#command-line-reference)
 - [Configuration](#configuration)
+- [Library usage](#library-usage)
 - [Data sources](#data-sources)
 - [Outputs](#outputs)
 - [Testing](#testing)
@@ -31,7 +35,7 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
   - **IEKF (`esekfom`)** — iterated error-state Kalman filter on the 23-DOF manifold state `{pos, rot, offset_R_L_I, offset_T_L_I, vel, bg, ba, grav(S²)}`, including the FAST-LIO2 `update_iterated_dyn_share_modified` formulation with online extrinsic estimation.
   - **ikd-Tree** — incremental k-d tree with lazy deletion, box deletion, downsampled insertion, subtree rebalancing and O(log n) k-NN search.
   - **Mapping** — FOV-based sliding local map, voxel-grid downsampling and incremental map update.
-- Zero IO in the core crate — `no_std`-friendly architecture (currently `std` only), no ROS, no PCL.
+- Zero IO in the core crate — no ROS, no PCL.
 - **Decoupled driver layer** — all hardware access lives in the `fast-lio-driver` crate (one module per brand, heavy vendor SDKs feature-gated); the algorithm core never sees a vendor SDK.
 - **Live Livox support (no ROS)** — `fast-lio-driver` connects directly to HAP / Mid-360 LiDARs through the official Livox SDK2 (via the `livox-sdk2` crate) and streams point clouds + the built-in IMU into the pipeline.
 - Numerically faithful port, verified against the C++ implementation module by module (see [Testing](#testing)).
@@ -79,7 +83,7 @@ fast-lio/
     │       └── hesai.rs       #   spinning LiDAR (WIP)
     ├── lidar-map/             # (placeholder) occupancy / voxel map — future
     ├── lidar-nav/             # (placeholder) planning & navigation — future
-    └── fast-lio-app/          # offline driver binary (not published)
+    └── fast-lio-app/          # offline/live driver binary (not published)
 ```
 
 The algorithm core (`fast-lio`) is **vendor-SDK-free**: it only consumes the
@@ -88,29 +92,107 @@ lives in `fast-lio-driver`, whose adapters translate each brand's raw output
 into that format. Dependency direction: `fast-lio-app → fast-lio-driver →
 fast-lio`.
 
+## Requirements
+
+- **Rust toolchain ≥ 1.85** (edition 2024). Install via [rustup](https://rustup.rs).
+- For live Livox devices: `cmake` and a C/C++ compiler on the target machine
+  (the `livox-sdk2` crate vendors and builds the official C++ SDK2), plus
+  network access to the LiDAR.
+
 ## Quick start
 
-Requirements: stable Rust ≥ 1.85 (edition 2024).
-
 ```bash
-# run the offline demo (synthetic circular trajectory, IMU 200 Hz + LiDAR 10 Hz, 20 s)
+# 1) run the offline demo (synthetic circular trajectory, IMU 200 Hz + LiDAR 10 Hz, 20 s)
 cargo run -p fast-lio-app --release -- --sim
 
-# run on a real Livox LiDAR (no ROS) — direct SDK2 connection
+# 2) run on a real Livox LiDAR (no ROS) — direct SDK2 connection
 cargo run -p fast-lio-app --release -- --live /path/to/mid360_config.json
 
-# results are written to ./out by default (or pass --out <dir>)
+# 3) results are written to ./out by default (or pass --out <dir>)
 cargo run -p fast-lio-app --release -- --sim --out my_output
 ```
 
 The demo drives the whole pipeline with the built-in `SimSource` and produces:
 
 - `pos_log.txt` — per-frame pose (time, euler angles, position, velocity, gyro bias), the same format as the C++ node;
-- `map.xyz` — the world-frame map points stored in the ikd-Tree.
+- `map.xyz` (or `.pcd` / `.ply`, see [`--out-format`](#command-line-reference)) — the world-frame map points stored in the ikd-Tree.
+
+## Command line reference
+
+`fast-lio-app` (the binary in `crates/fast-lio-app`) supports:
+
+```
+usage: fast-lio-app [--out <dir>] [--out-format <xyz|pcd|ply>] [--sim] | [--live <config.json> [--scan-ms <ms>]]
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--sim` | — | Run on the synthetic `SimSource` demo (mutually exclusive with `--live`). |
+| `--live <config.json>` | — | Connect to a Livox LiDAR via SDK2 (no ROS). `<config.json>` is the Livox config file (the same one used by Livox Viewer / driver2). |
+| `--scan-ms <ms>` | `100` | LiDAR scan frame period in milliseconds (10 Hz → 100). Lower = higher scan rate. |
+| `--out <dir>` | `out` | Output directory for the trajectory and map files (created if missing). |
+| `--out-format <fmt>` | `xyz` | Map file format: `xyz`, `pcd`, or `ply`. See [Outputs](#outputs). |
+
+Notes:
+
+- The `--live` mode builds **direct odometry mode** (`feature_extract_enable = false`): the SDK2 stream is routed through a single scan line because per-point ring indices are not exposed by the SDK. This is the robust default for Livox.
+- The **IMU accel is converted from g to m/s²** (see `ACC_G_TO_MPS2` in `crates/fast-lio-driver/src/livox.rs`; set it to `1.0` if your firmware reports m/s² directly).
+- Frame timestamps use a local monotonic clock (arrival time). If you need exact PTP/UTC synchronization, `Packet::timestamp()` is exposed for that.
+
+## Configuration
+
+The pipeline is configured through [`LioConfig`](crates/fast-lio/src/laser_mapping.rs), which mirrors the ROS parameters / yaml files of the C++ node. Build a `LioConfig` and pass it to `LaserMapping::new(&cfg)`; all fields have sensible defaults, so `..Default::default()` gives a working configuration.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `lidar_type` | `LidarType` | `Avia` | `Avia` / `Velo16` / `Oust64` / `Marsim` |
+| `feature_extract_enable` | `bool` | `false` | enable plane/edge feature extraction |
+| `point_filter_num` | `i32` | `2` | keep every Nth point in direct mode |
+| `blind` | `f64` | `0.01` | minimum range (m² threshold) |
+| `n_scans` / `scan_rate` | `usize` / `i32` | `16` / `10` | LiDAR lines & scan rate (Velodyne time computation) |
+| `timestamp_unit` | `TimeUnit` | `Us` | unit of the raw point timestamp field |
+| `filter_size_surf` / `filter_size_map` | `f32` | `0.5` / `0.5` | voxel sizes (scan / map, m) |
+| `cube_len` | `f64` | `1000` | local-map box side length (m) — launch files use `1000` |
+| `det_range` | `f32` | `300` | detection range used by the FOV sliding logic (m) |
+| `fov_deg` | `f64` | `180.0` | field of view (degrees) used by the FOV sliding logic |
+| `gyr_cov` / `acc_cov` | `f64` | `0.1` | IMU measurement covariances |
+| `b_gyr_cov` / `b_acc_cov` | `f64` | `1e-4` | bias random-walk covariances |
+| `extrinsic_est_en` | `bool` | `true` | online estimation of the LiDAR↔IMU extrinsic |
+| `time_sync_en` | `bool` | `false` | enable the LiDAR↔IMU time-offset estimator |
+| `time_offset_lidar_to_imu` | `f64` | `0.0` | initial LiDAR-to-IMU time offset (s) |
+| `extrinsic_t` | `[f64; 3]` | `[0,0,0]` | initial extrinsic translation |
+| `extrinsic_r` | `[f64; 9]` | identity | initial extrinsic rotation (row-major 3×3) |
+| `max_iteration` | `usize` | `4` | IEKF iterations per frame |
 
 ## Library usage
 
-Add the core crate as a dependency and feed it sensor data:
+Add the core crate as a dependency and feed it sensor data. The core is **purely a library**: no I/O, no ROS — you supply the samples.
+
+### 1. Add the dependency
+
+```toml
+[dependencies]
+fast-lio = { path = "../fast-lio" }   # or a version tag once published
+```
+
+### 2. Implement the data source
+
+Any time-ordered stream of [`SensorData`](crates/fast-lio/src/types.rs) works. Implement the [`DataSource`](crates/fast-lio/src/data_source.rs) trait (a bag reader, socket handler, or your own simulator):
+
+```rust
+use fast_lio::types::SensorData;
+
+struct MySource;
+
+impl fast_lio::data_source::DataSource for MySource {
+    fn next(&mut self) -> Option<SensorData> {
+        // read one sample from your bag / socket / device and return it
+        todo!()
+    }
+}
+```
+
+### 3. Configure and run the pipeline
 
 ```rust
 use fast_lio::laser_mapping::{LaserMapping, LioConfig, LioResult};
@@ -141,28 +223,23 @@ for sample in data_source {
 }
 ```
 
-The same pattern works for any sensor input — implement the [`DataSource`](crates/fast-lio/src/data_source.rs) trait for your bag reader, socket, or device driver.
+### Public API summary
 
-## Configuration
-
-The pipeline is configured through [`LioConfig`](crates/fast-lio/src/laser_mapping.rs), mirroring the ROS parameters / yaml files of the C++ node:
-
-| Parameter | Default | Meaning |
+| Item | Path | Purpose |
 |---|---|---|
-| `lidar_type` | `Avia` | `Avia` / `Velo16` / `Oust64` / `Marsim` |
-| `feature_extract_enable` | `false` | enable plane/edge feature extraction |
-| `point_filter_num` | `2` | keep every Nth point in direct mode |
-| `blind` | `0.01` | minimum range (m² threshold) |
-| `n_scans` / `scan_rate` | `16` / `10` | LiDAR lines & scan rate (Velodyne time computation) |
-| `timestamp_unit` | `Us` | unit of the raw point timestamp field |
-| `filter_size_surf` / `filter_size_map` | `0.5` / `0.5` | voxel sizes (scan / map, m) |
-| `cube_len` | `1000` | local-map box side length (m) — launch files use `1000` |
-| `det_range` | `300` | detection range used by the FOV sliding logic (m) |
-| `gyr_cov` / `acc_cov` | `0.1` | IMU measurement covariances |
-| `b_gyr_cov` / `b_acc_cov` | `1e-4` | bias random-walk covariances |
-| `extrinsic_est_en` | `true` | online estimation of the LiDAR↔IMU extrinsic |
-| `extrinsic_t` / `extrinsic_r` | identity | initial extrinsic (translation + 3×3 rotation) |
-| `max_iteration` | `4` | IEKF iterations per frame |
+| `LaserMapping` | `fast_lio::laser_mapping::LaserMapping` | the main front-end: `new(&LioConfig)`, `add_imu`, `add_lidar_avia`, `add_lidar_standard`, `has_data`, `run_once` |
+| `LioConfig` | `fast_lio::laser_mapping::LioConfig` | pipeline configuration (see [Configuration](#configuration)) |
+| `LioResult` | `fast_lio::laser_mapping::LioResult` | per-frame output: `time`, `pos`, `quat [w,x,y,z]`, `vel`, `bg`, `ba`, `map_points`, `effct_feat_num`, `res_mean` |
+| `SensorData` | `fast_lio::types::SensorData` | normalized input enum: `Imu` / `LidarAvia` / `LidarStandard` |
+| `LidarType` | `fast_lio::types::LidarType` | `Avia` / `Velo16` / `Oust64` / `Marsim` |
+| `TimeUnit` | `fast_lio::types::TimeUnit` | `Sec` / `Ms` / `Us` / `Ns` — unit of the per-point timestamp field |
+| `DataSource` | `fast_lio::data_source::DataSource` | trait for any time-ordered sensor source |
+| `KdTree` | `fast_lio::ikdtree::KdTree` | the incremental k-d tree (map): `build`, `nearest_search`, `add_points`, `delete_point_boxes`, `validnum` |
+
+The measurement model is exposed for advanced users: `LaserMapping` keeps its
+`kf` (the `EseKf`) and `ikdtree` (the `KdTree`) as public fields, matching the
+C++ node's structure, so you can drive the IEKF update yourself with a custom
+`h_share_model`.
 
 ## Data sources
 
@@ -195,12 +272,20 @@ Requirements and notes:
 
 ## Outputs
 
-The offline app writes, per run:
+The app writes, per run:
 
-- `pos_log.txt` — trajectory in the C++ `dump_lio_state_to_log` format (time, RPY, position, velocity, gyro bias);
-- `map.xyz` — the accumulated world-frame map (`x y z` lines).
+| File | Format | Description |
+|---|---|---|
+| `pos_log.txt` | text | trajectory in the C++ `dump_lio_state_to_log` format: `time RPY(deg) pos vel bg` |
+| `map.xyz` | text (`x y z` per line) | the accumulated world-frame map (default) |
+| `map.pcd` | ASCII PCD | `x y z intensity` — readable by PCL / rviz tools (via `--out-format pcd`) |
+| `map.ply` | ASCII PLY | `x y z intensity` — opens directly in CloudCompare / MeshLab (via `--out-format ply`) |
 
-Both are directly comparable with logs produced by the C++ implementation for validation.
+> `intensity` is the raw LiDAR reflectivity passed through from the sensor
+> (for Livox it is the SDK2 `reflectivity` 0–255; the synthetic demo fills a
+> constant `100.0`). It is not used by the algorithm.
+
+All formats are directly comparable with logs produced by the C++ implementation for validation.
 
 ## Testing
 
