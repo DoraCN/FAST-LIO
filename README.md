@@ -16,6 +16,7 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
 - [Workspace layout](#workspace-layout)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
+- [Mapping results](#mapping-results)
 - [Command line reference](#command-line-reference)
 - [Configuration](#configuration)
 - [Library usage](#library-usage)
@@ -116,6 +117,16 @@ The demo drives the whole pipeline with the built-in `SimSource` and produces:
 
 - `pos_log.txt` — per-frame pose (time, euler angles, position, velocity, gyro bias), the same format as the C++ node;
 - `map.pcd` (default; or `.xyz` / `.ply`, see [`--out-format`](#command-line-reference)) — the world-frame map points stored in the ikd-Tree.
+
+## Mapping results
+
+The screenshots below were produced with the current Rust port running live on a
+Mid-360 in a real environment:
+
+| | |
+|---|---|
+| <img src="assets/map01.png" width="480"/> | <img src="assets/map02.png" width="480"/> |
+| The complete 3D point-cloud map built by the pipeline, showing the full environment (walls, structures and terrain) without any filtering. | The same map with a slice of the Z (height) axis removed, so the drivable paths / road level become clearly visible in 3D. |
 
 ## Command line reference
 
