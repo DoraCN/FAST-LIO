@@ -151,7 +151,7 @@ examples:
 | Option | Default | Meaning |
 |---|---|---|
 | `--sim` | — | Run on the synthetic `SimSource` demo (mutually exclusive with `--driver`). |
-| `--driver <name>` | — | Select the LiDAR driver by name (`livox`, `velodyne`, `ouster`, `hesai`, `marsim`). Unknown names are rejected by `open()` with an actionable error. |
+| `--driver <name>` | — | Select the LiDAR driver by name (`livox`, `velodyne`, `ouster`, `hesai`, `marsim`). Unknown names are rejected with an actionable error; adapters not yet implemented (e.g. `hesai`) are reported as such. |
 | `--config <file>` | — | Vendor config file (Livox SDK2 JSON, the same one used by Livox Viewer / driver2). |
 | `--ip <addr>` | — | LiDAR network address (spinning LiDARs). |
 | `--port <port>` | — | UDP data port for the spinning-LiDAR packet stream. |
@@ -184,7 +184,7 @@ The pipeline is configured through [`LioConfig`](crates/fast-lio/src/laser_mappi
 | `filter_size_surf` / `filter_size_map` | `f32` | `0.5` / `0.5` | voxel sizes (scan / map, m) |
 | `cube_len` | `f64` | `1000` | local-map box side length (m) — launch files use `1000` |
 | `det_range` | `f32` | `300` | detection range used by the FOV sliding logic (m) |
-| `fov_deg` | `f64` | `180.0` | field of view (degrees) used by the FOV sliding logic |
+| `fov_deg` | `f64` | `180.0` | reserved field (not yet wired into the FOV logic; the sliding map currently uses `det_range` only) |
 | `gyr_cov` / `acc_cov` | `f64` | `0.1` | IMU measurement covariances |
 | `b_gyr_cov` / `b_acc_cov` | `f64` | `1e-4` | bias random-walk covariances |
 | `extrinsic_est_en` | `bool` | `true` | online estimation of the LiDAR↔IMU extrinsic |
@@ -237,7 +237,8 @@ let cfg = LioConfig {
 
 let mut mapping = LaserMapping::new(&cfg);
 
-for sample in data_source {
+// `data_source` is any `DataSource` (see step 2)
+while let Some(sample) = data_source.next() {
     match sample {
         SensorData::Imu(imu) => mapping.add_imu(&imu),
         SensorData::LidarAvia(msg) => mapping.add_lidar_avia(&msg),
@@ -284,7 +285,7 @@ With the `livox-sdk2` feature (enabled by default in `fast-lio-app`), the
 `fast-lio-driver` crate connects **directly to the LiDAR over the network**, no ROS involved:
 
 ```bash
-cargo run -p fast-lio-app --release -- --live mid360_config.json [--scan-ms 100]
+cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json [--scan-ms 100]
 ```
 
 Requirements and notes:

@@ -143,7 +143,7 @@ examples:
 | 选项 | 默认值 | 说明 |
 |---|---|---|
 | `--sim` | — | 使用合成的 `SimSource` 演示数据（与 `--driver` 互斥）。 |
-| `--driver <name>` | — | 按名字选择激光雷达驱动（`livox`、`velodyne`、`ouster`、`hesai`、`marsim`）。未知名字会被 `open()` 以明确错误拒绝。 |
+| `--driver <name>` | — | 按名字选择激光雷达驱动（`livox`、`velodyne`、`ouster`、`hesai`、`marsim`）。未知名字会以明确错误拒绝；尚未实现的适配器（如 `hesai`）会明确提示。 |
 | `--config <file>` | — | 厂商配置文件（Livox SDK2 JSON，与 Livox Viewer / driver2 用的相同）。 |
 | `--ip <addr>` | — | 激光雷达网络地址（机械式雷达）。 |
 | `--port <port>` | — | 机械式雷达点云包的 UDP 数据端口。 |
@@ -174,7 +174,7 @@ examples:
 | `filter_size_surf` / `filter_size_map` | `f32` | `0.5` / `0.5` | 体素尺寸（扫描 / 地图，m） |
 | `cube_len` | `f64` | `1000` | 局部地图盒子边长（m）—— launch 文件使用 `1000` |
 | `det_range` | `f32` | `300` | FOV 滑动逻辑使用的探测距离（m） |
-| `fov_deg` | `f64` | `180.0` | FOV 滑动逻辑使用的视场角（度） |
+| `fov_deg` | `f64` | `180.0` | 预留字段（尚未接入 FOV 逻辑；当前滑动地图只用 `det_range`） |
 | `gyr_cov` / `acc_cov` | `f64` | `0.1` | IMU 测量协方差 |
 | `b_gyr_cov` / `b_acc_cov` | `f64` | `1e-4` | 偏置随机游走协方差 |
 | `extrinsic_est_en` | `bool` | `true` | 是否在线估计 LiDAR↔IMU 外参 |
@@ -227,7 +227,8 @@ let cfg = LioConfig {
 
 let mut mapping = LaserMapping::new(&cfg);
 
-for sample in data_source {
+// `data_source` 是任意 `DataSource`（见第 2 步）
+while let Some(sample) = data_source.next() {
     match sample {
         SensorData::Imu(imu) => mapping.add_imu(&imu),
         SensorData::LidarAvia(msg) => mapping.add_lidar_avia(&msg),
@@ -270,7 +271,7 @@ for sample in data_source {
 启用 `livox-sdk2` feature（`fast-lio-app` 默认启用）后，`fast-lio-driver` crate 会**通过以太网直接连接激光雷达**，无需 ROS：
 
 ```bash
-cargo run -p fast-lio-app --release -- --live mid360_config.json [--scan-ms 100]
+cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json [--scan-ms 100]
 ```
 
 要求与注意事项：

@@ -108,10 +108,13 @@ fn main() {
     std::fs::create_dir_all(&out_dir).expect("create output dir");
 
     // ---- pipeline configuration -----------------------------------------
-    let lidar_type = driver_name
-        .as_deref()
-        .map(lidar_type_from_driver)
-        .unwrap_or(LidarType::Velo16);
+    let lidar_type = match driver_name.as_deref() {
+        None => LidarType::Velo16,
+        Some(name) => lidar_type_from_driver(name).unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }),
+    };
     let cfg = match lidar_type {
         LidarType::Avia => {
             // Direct odometry mode (no feature extraction): robust for Livox and
@@ -156,8 +159,12 @@ fn main() {
 
     // ---- data source ----------------------------------------------------
     let mut source: Box<dyn DataSource> = if let Some(name) = driver_name {
+        let lidar_type = lidar_type_from_driver(&name).unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        });
         let params = DriverParams::new(
-            lidar_type_from_driver(&name),
+            lidar_type,
             config_path,
             udp_ip,
             udp_port,
@@ -259,15 +266,18 @@ fn main() {
     }
 }
 
-/// Convert a CLI driver name into a [`LidarType`]. Unknown names fall back to
-/// `Avia` so `open()` reports the actionable error for unimplemented drivers.
-fn lidar_type_from_driver(name: &str) -> LidarType {
+/// Convert a CLI driver name into a [`LidarType`]. Unknown names are rejected
+/// with an actionable error instead of being silently mapped to a wrong driver.
+fn lidar_type_from_driver(name: &str) -> Result<LidarType, String> {
     match name.to_ascii_lowercase().as_str() {
-        "livox" | "avia" | "hap" | "mid360" | "mid-360" => LidarType::Avia,
-        "velodyne" | "velo16" => LidarType::Velo16,
-        "ouster" | "oust64" => LidarType::Oust64,
-        "marsim" => LidarType::Marsim,
-        _ => LidarType::Avia,
+        "livox" | "avia" | "hap" | "mid360" | "mid-360" => Ok(LidarType::Avia),
+        "velodyne" | "velo16" => Ok(LidarType::Velo16),
+        "ouster" | "oust64" => Ok(LidarType::Oust64),
+        "marsim" => Ok(LidarType::Marsim),
+        "hesai" => Err("the hesai driver is not implemented yet (add an adapter in fast-lio-driver)".to_string()),
+        other => Err(format!(
+            "unknown driver '{other}' — supported: livox, velodyne, ouster, hesai, marsim"
+        )),
     }
 }
 
