@@ -4,24 +4,52 @@ use std::time::Duration;
 
 use fast_lio::data_source::{DataSource, SimParams, SimSource};
 use fast_lio::laser_mapping::{LaserMapping, LioConfig, LioResult};
-use fast_lio::types::{LidarType, SensorData, TimeUnit};
+use fast_lio::types::{LidarType, PointType, SensorData, TimeUnit};
 use fast_lio_driver::{open, DriverParams};
+
+#[derive(Clone, Copy, PartialEq)]
+enum MapFormat {
+    Xyz,
+    Pcd,
+    Ply,
+}
+
+impl MapFormat {
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "xyz" => Some(Self::Xyz),
+            "pcd" => Some(Self::Pcd),
+            "ply" => Some(Self::Ply),
+            _ => None,
+        }
+    }
+
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Xyz => "xyz",
+            Self::Pcd => "pcd",
+            Self::Ply => "ply",
+        }
+    }
+}
 
 fn usage() -> ! {
     eprintln!(
-        "usage: fast-lio-app [--out <dir>] [--sim] | [--live <config.json> [--scan-ms <ms>]]\n\
+        "usage: fast-lio-app [--out <dir>] [--out-format <xyz|pcd|ply>] [--sim] | [--live <config.json> [--scan-ms <ms>]]\n\
          \n\
          modes:\n\
          \x20 --sim                    synthetic demo data (default)\n\
          \x20 --live <config.json>     connect to a Livox LiDAR via the SDK2 (no ROS)\n\
          \x20   --scan-ms <ms>         scan frame period in ms (default 100)\n\
-         \x20 --out <dir>              output directory (default \"out\")"
+         \x20 --out <dir>              output directory (default \"out\")\n\
+         \x20 --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)"
     );
     std::process::exit(2);
 }
 
 fn main() {
     let mut out_dir = "out".to_string();
+    let mut out_format = MapFormat::Xyz;
     let mut live_config: Option<String> = None;
     let mut scan_ms: f64 = 100.0;
     let mut sim = false;
@@ -30,6 +58,13 @@ fn main() {
     while let Some(a) = args.next() {
         match a.as_str() {
             "--out" => out_dir = args.next().unwrap_or_else(|| usage()),
+            "--out-format" => {
+                out_format = args
+                    .next()
+                    .map(|s| MapFormat::parse(&s))
+                    .flatten()
+                    .unwrap_or_else(|| usage())
+            }
             "--sim" => sim = true,
             "--live" => live_config = Some(args.next().unwrap_or_else(|| usage())),
             "--scan-ms" => scan_ms = args.next().unwrap_or_else(|| usage()).parse().unwrap_or_else(|_| usage()),
@@ -152,19 +187,11 @@ fn main() {
     println!("trajectory -> {traj_path} ({} poses)", results.len());
 
     // write the map (world frame points from the kd-tree)
-    let map_path = format!("{out_dir}/map.xyz");
-    {
-        mapping.ikdtree.flatten_to_storage();
-        let f = File::create(&map_path).expect("open map");
-        let mut w = BufWriter::new(f);
-        for p in &mapping.ikdtree.pcl_storage {
-            writeln!(w, "{} {} {}", p.x, p.y, p.z).expect("write map");
-        }
-    }
-    println!(
-        "map -> {map_path} ({} points)",
-        mapping.ikdtree.pcl_storage.len()
-    );
+    mapping.ikdtree.flatten_to_storage();
+    let map_points = mapping.ikdtree.pcl_storage.clone();
+    let map_path = format!("{out_dir}/map.{}", out_format.extension());
+    write_map(&map_path, &map_points, out_format);
+    println!("map -> {map_path} ({} points)", map_points.len());
 
     // print a few sanity numbers
     if let Some(last) = results.last() {
@@ -200,4 +227,46 @@ fn quat_to_euler(q: &[f64; 4]) -> [f64; 3] {
         (2.0 * test / unit).asin() * 57.3,
         (2.0 * z * w + 2.0 * y * x).atan2(sqx - sqy - sqz + sqw) * 57.3,
     ]
+}
+
+/// Write the map point cloud in the requested format.
+fn write_map(path: &str, points: &[PointType], fmt: MapFormat) {
+    let f = File::create(path).expect("open map");
+    let mut w = BufWriter::new(f);
+    match fmt {
+        MapFormat::Xyz => {
+            for p in points {
+                writeln!(w, "{} {} {}", p.x, p.y, p.z).expect("write map");
+            }
+        }
+        MapFormat::Pcd => {
+            writeln!(w, "# .PCD v0.7 - Point Cloud Data file format").expect("write map");
+            writeln!(w, "VERSION 0.7").expect("write map");
+            writeln!(w, "FIELDS x y z intensity").expect("write map");
+            writeln!(w, "SIZE 4 4 4 4").expect("write map");
+            writeln!(w, "TYPE F F F F").expect("write map");
+            writeln!(w, "COUNT 1 1 1 1").expect("write map");
+            writeln!(w, "WIDTH {}", points.len()).expect("write map");
+            writeln!(w, "HEIGHT 1").expect("write map");
+            writeln!(w, "VIEWPOINT 0 0 0 1 0 0 0").expect("write map");
+            writeln!(w, "POINTS {}", points.len()).expect("write map");
+            writeln!(w, "DATA ascii").expect("write map");
+            for p in points {
+                writeln!(w, "{} {} {} {}", p.x, p.y, p.z, p.intensity).expect("write map");
+            }
+        }
+        MapFormat::Ply => {
+            writeln!(w, "ply").expect("write map");
+            writeln!(w, "format ascii 1.0").expect("write map");
+            writeln!(w, "element vertex {}", points.len()).expect("write map");
+            writeln!(w, "property float x").expect("write map");
+            writeln!(w, "property float y").expect("write map");
+            writeln!(w, "property float z").expect("write map");
+            writeln!(w, "property float intensity").expect("write map");
+            writeln!(w, "end_header").expect("write map");
+            for p in points {
+                writeln!(w, "{} {} {} {}", p.x, p.y, p.z, p.intensity).expect("write map");
+            }
+        }
+    }
 }
