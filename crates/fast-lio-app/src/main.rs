@@ -35,14 +35,28 @@ impl MapFormat {
 
 fn usage() -> ! {
     eprintln!(
-        "usage: fast-lio-app [--out <dir>] [--out-format <xyz|pcd|ply>] [--sim] | [--live <config.json> [--scan-ms <ms>]]\n\
+        "usage: fast-lio-app [common opts] --sim | --driver <name> [driver opts]\n\
+         \n\
+         common opts:\n\
+         \x20 --out <dir>              output directory (default \"out\")\n\
+         \x20 --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)\n\
+         \x20 --scan-ms <ms>           scan frame period in ms (default 100)\n\
          \n\
          modes:\n\
          \x20 --sim                    synthetic demo data (default)\n\
-         \x20 --live <config.json>     connect to a Livox LiDAR via the SDK2 (no ROS)\n\
-         \x20   --scan-ms <ms>         scan frame period in ms (default 100)\n\
-         \x20 --out <dir>              output directory (default \"out\")\n\
-         \x20 --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)"
+         \x20 --driver <name>          connect to a real LiDAR. Supported names:\n\
+         \x20   livox                  Livox (HAP / Mid-360) via SDK2, needs --config\n\
+         \x20   velodyne | ouster | hesai | marsim   spinning LiDAR (adapter may be WIP)\n\
+         \n\
+         driver opts:\n\
+         \x20 --config <file>          vendor config file (Livox SDK2 JSON)\n\
+         \x20 --ip <addr>              LiDAR network address (spinning LiDARs)\n\
+         \x20 --port <port>            UDP data port (spinning LiDARs)\n\
+         \n\
+         examples:\n\
+         \x20 fast-lio-app --sim\n\
+         \x20 fast-lio-app --driver livox --config mid360_config.json\n\
+         \x20 fast-lio-app --driver velodyne --ip 192.168.1.100 --port 2368"
     );
     std::process::exit(2);
 }
@@ -50,7 +64,10 @@ fn usage() -> ! {
 fn main() {
     let mut out_dir = "out".to_string();
     let mut out_format = MapFormat::Xyz;
-    let mut live_config: Option<String> = None;
+    let mut driver_name: Option<String> = None;
+    let mut config_path: Option<String> = None;
+    let mut udp_ip: Option<String> = None;
+    let mut udp_port: Option<u16> = None;
     let mut scan_ms: f64 = 100.0;
     let mut sim = false;
 
@@ -61,65 +78,100 @@ fn main() {
             "--out-format" => {
                 out_format = args
                     .next()
-                    .map(|s| MapFormat::parse(&s))
-                    .flatten()
+                    .and_then(|s| MapFormat::parse(&s))
                     .unwrap_or_else(|| usage())
             }
             "--sim" => sim = true,
-            "--live" => live_config = Some(args.next().unwrap_or_else(|| usage())),
+            // backwards-compatible alias: --live <config> == --driver livox --config <config>
+            "--live" => {
+                driver_name = Some("livox".to_string());
+                config_path = Some(args.next().unwrap_or_else(|| usage()));
+            }
+            "--driver" => driver_name = Some(args.next().unwrap_or_else(|| usage())),
+            "--config" => config_path = Some(args.next().unwrap_or_else(|| usage())),
+            "--ip" => udp_ip = Some(args.next().unwrap_or_else(|| usage())),
+            "--port" => {
+                udp_port = Some(
+                    args.next()
+                        .unwrap_or_else(|| usage())
+                        .parse()
+                        .unwrap_or_else(|_| usage()),
+                )
+            }
             "--scan-ms" => scan_ms = args.next().unwrap_or_else(|| usage()).parse().unwrap_or_else(|_| usage()),
             _ => usage(),
         }
     }
-    if live_config.is_some() && sim {
+    if sim && driver_name.is_some() {
         usage();
     }
     std::fs::create_dir_all(&out_dir).expect("create output dir");
 
     // ---- pipeline configuration -----------------------------------------
-    let cfg = if live_config.is_some() {
-        // Direct odometry mode (no feature extraction): robust for Livox and
-        // required here because the SDK2 stream is routed through a single scan
-        // line (no per-point ring information).
-        LioConfig {
-            lidar_type: LidarType::Avia,
-            feature_extract_enable: false,
-            point_filter_num: 2,
-            n_scans: 6,
-            scan_rate: 10,
-            timestamp_unit: TimeUnit::Us,
-            filter_size_surf: 0.5,
-            filter_size_map: 0.5,
-            gyr_cov: 0.1,
-            acc_cov: 0.1,
-            b_gyr_cov: 0.0001,
-            b_acc_cov: 0.0001,
-            ..Default::default()
+    let lidar_type = driver_name
+        .as_deref()
+        .map(lidar_type_from_driver)
+        .unwrap_or(LidarType::Velo16);
+    let cfg = match lidar_type {
+        LidarType::Avia => {
+            // Direct odometry mode (no feature extraction): robust for Livox and
+            // required because the SDK2 stream is routed through a single scan
+            // line (no per-point ring information).
+            LioConfig {
+                lidar_type: LidarType::Avia,
+                feature_extract_enable: false,
+                point_filter_num: 2,
+                n_scans: 6,
+                scan_rate: 10,
+                timestamp_unit: TimeUnit::Us,
+                filter_size_surf: 0.5,
+                filter_size_map: 0.5,
+                gyr_cov: 0.1,
+                acc_cov: 0.1,
+                b_gyr_cov: 0.0001,
+                b_acc_cov: 0.0001,
+                ..Default::default()
+            }
         }
-    } else {
-        // synthetic demo: spinning-lidar style data
-        LioConfig {
-            lidar_type: LidarType::Velo16,
-            feature_extract_enable: false,
-            point_filter_num: 2,
-            n_scans: 16,
-            timestamp_unit: TimeUnit::Ms,
-            filter_size_surf: 0.5,
-            filter_size_map: 0.5,
-            gyr_cov: 0.1,
-            acc_cov: 0.1,
-            b_gyr_cov: 0.0001,
-            b_acc_cov: 0.0001,
-            ..Default::default()
+        _ => {
+            // spinning LiDAR: per-point ring available, feature extraction
+            // can be enabled; timestamps in milliseconds
+            LioConfig {
+                lidar_type,
+                feature_extract_enable: false,
+                point_filter_num: 2,
+                n_scans: 16,
+                scan_rate: 10,
+                timestamp_unit: TimeUnit::Ms,
+                filter_size_surf: 0.5,
+                filter_size_map: 0.5,
+                gyr_cov: 0.1,
+                acc_cov: 0.1,
+                b_gyr_cov: 0.0001,
+                b_acc_cov: 0.0001,
+                ..Default::default()
+            }
         }
     };
 
     // ---- data source ----------------------------------------------------
-    let mut source: Box<dyn DataSource> = if let Some(config) = live_config {
-        println!("connecting to Livox device via SDK2 (config: {config}) ...");
-        let params = DriverParams::livox(config, Duration::from_secs_f64(scan_ms / 1000.0));
+    let mut source: Box<dyn DataSource> = if let Some(name) = driver_name {
+        let params = DriverParams::new(
+            lidar_type_from_driver(&name),
+            config_path,
+            udp_ip,
+            udp_port,
+            Duration::from_secs_f64(scan_ms / 1000.0),
+        );
+        println!(
+            "opening {name} driver: config={:?}, ip={:?}, port={:?}, scan={} ms ...",
+            params.config_path,
+            params.udp_ip,
+            params.udp_port,
+            scan_ms as i64
+        );
         open(&params)
-            .expect("failed to open the lidar driver — check the config file and the network")
+            .unwrap_or_else(|e| panic!("failed to open the {name} driver: {e}"))
     } else {
         let _ = scan_ms;
         let sim = SimParams {
@@ -204,6 +256,18 @@ fn main() {
             last.map_points,
             last.res_mean
         );
+    }
+}
+
+/// Convert a CLI driver name into a [`LidarType`]. Unknown names fall back to
+/// `Avia` so `open()` reports the actionable error for unimplemented drivers.
+fn lidar_type_from_driver(name: &str) -> LidarType {
+    match name.to_ascii_lowercase().as_str() {
+        "livox" | "avia" | "hap" | "mid360" | "mid-360" => LidarType::Avia,
+        "velodyne" | "velo16" => LidarType::Velo16,
+        "ouster" | "oust64" => LidarType::Oust64,
+        "marsim" => LidarType::Marsim,
+        _ => LidarType::Avia,
     }
 }
 

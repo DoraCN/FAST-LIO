@@ -99,8 +99,8 @@ fast-lio/
 # 1) 运行离线演示（合成圆周轨迹，IMU 200 Hz + LiDAR 10 Hz，时长 20 s）
 cargo run -p fast-lio-app --release -- --sim
 
-# 2) 在真实 Livox 激光雷达上运行（无需 ROS）—— 直接 SDK2 连接
-cargo run -p fast-lio-app --release -- --live /path/to/mid360_config.json
+# 2) 在真实激光雷达上运行（无需 ROS）—— 驱动通用，按名字选择品牌
+cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json
 
 # 3) 结果默认写入 ./out，也可用 --out <dir> 指定
 cargo run -p fast-lio-app --release -- --sim --out my_output
@@ -113,23 +113,49 @@ cargo run -p fast-lio-app --release -- --sim --out my_output
 
 ## 命令行参考
 
-`fast-lio-app`（`crates/fast-lio-app` 中的二进制）支持：
+`fast-lio-app`（`crates/fast-lio-app` 中的二进制）**与驱动解耦**：用 `--driver <name>` 选择激光雷达品牌，CLI 从不绑定某个具体传感器型号。
 
 ```
-usage: fast-lio-app [--out <dir>] [--out-format <xyz|pcd|ply>] [--sim] | [--live <config.json> [--scan-ms <ms>]]
+usage: fast-lio-app [common opts] --sim | --driver <name> [driver opts]
+
+common opts:
+  --out <dir>              output directory (default "out")
+  --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)
+  --scan-ms <ms>           scan frame period in ms (default 100)
+
+modes:
+  --sim                    synthetic demo data (default)
+  --driver <name>          connect to a real LiDAR. Supported names:
+    livox                  Livox (HAP / Mid-360) via SDK2, needs --config
+    velodyne | ouster | hesai | marsim   spinning LiDAR (adapter may be WIP)
+
+driver opts:
+  --config <file>          vendor config file (Livox SDK2 JSON)
+  --ip <addr>              LiDAR network address (spinning LiDARs)
+  --port <port>            UDP data port (spinning LiDARs)
+
+examples:
+  fast-lio-app --sim
+  fast-lio-app --driver livox --config mid360_config.json
+  fast-lio-app --driver velodyne --ip 192.168.1.100 --port 2368
 ```
 
 | 选项 | 默认值 | 说明 |
 |---|---|---|
-| `--sim` | — | 使用合成的 `SimSource` 演示数据（与 `--live` 互斥）。 |
-| `--live <config.json>` | — | 通过 SDK2 连接 Livox 激光雷达（无需 ROS）。`<config.json>` 是 Livox 配置文件（与 Livox Viewer / driver2 用的相同）。 |
+| `--sim` | — | 使用合成的 `SimSource` 演示数据（与 `--driver` 互斥）。 |
+| `--driver <name>` | — | 按名字选择激光雷达驱动（`livox`、`velodyne`、`ouster`、`hesai`、`marsim`）。未知名字会被 `open()` 以明确错误拒绝。 |
+| `--config <file>` | — | 厂商配置文件（Livox SDK2 JSON，与 Livox Viewer / driver2 用的相同）。 |
+| `--ip <addr>` | — | 激光雷达网络地址（机械式雷达）。 |
+| `--port <port>` | — | 机械式雷达点云包的 UDP 数据端口。 |
 | `--scan-ms <ms>` | `100` | 激光雷达扫描帧周期（毫秒）（10 Hz → 100）。越小帧率越高。 |
 | `--out <dir>` | `out` | 轨迹和地图文件的输出目录（不存在会自动创建）。 |
 | `--out-format <fmt>` | `xyz` | 地图文件格式：`xyz`、`pcd` 或 `ply`。见[输出文件](#输出文件)。 |
 
 注意事项：
 
-- `--live` 模式使用**直接里程计模式**（`feature_extract_enable = false`）：SDK2 流被路由到单条扫描线，因为 SDK 不暴露逐点 ring 索引。这是 Livox 的鲁棒默认配置。
+- `--live <config>` 保留为 **`--driver livox --config <config>` 的向后兼容别名**。
+- 新增激光雷达品牌只需在 `fast-lio-driver` 中实现对应适配器并在 `open()` 注册，**CLI 无需改动**（见 [`fast-lio-driver`](crates/fast-lio-driver)）。
+- `livox` 驱动以**直接里程计模式**运行（`feature_extract_enable = false`）：SDK2 流被路由到单条扫描线，因为 SDK 不暴露逐点 ring 索引。机械式雷达则使用逐点 `ring`/`time` 字段。
 - **IMU 加速度从 g 转换到 m/s²**（见 `crates/fast-lio-driver/src/livox.rs` 中的 `ACC_G_TO_MPS2`；如果固件直接上报 m/s²，将其设为 `1.0`）。
 - 帧时间戳使用本地单调时钟（到达时间）。若需要精确的 PTP/UTC 同步，`Packet::timestamp()` 已对外暴露。
 

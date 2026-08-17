@@ -105,8 +105,8 @@ fast-lio`.
 # 1) run the offline demo (synthetic circular trajectory, IMU 200 Hz + LiDAR 10 Hz, 20 s)
 cargo run -p fast-lio-app --release -- --sim
 
-# 2) run on a real Livox LiDAR (no ROS) — direct SDK2 connection
-cargo run -p fast-lio-app --release -- --live /path/to/mid360_config.json
+# 2) run on a real LiDAR (no ROS) — driver-agnostic, pick the brand by name
+cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json
 
 # 3) results are written to ./out by default (or pass --out <dir>)
 cargo run -p fast-lio-app --release -- --sim --out my_output
@@ -119,23 +119,53 @@ The demo drives the whole pipeline with the built-in `SimSource` and produces:
 
 ## Command line reference
 
-`fast-lio-app` (the binary in `crates/fast-lio-app`) supports:
+`fast-lio-app` (the binary in `crates/fast-lio-app`) is **driver-agnostic**: you
+select the LiDAR brand with `--driver <name>` and the CLI is never bound to a
+specific sensor model.
 
 ```
-usage: fast-lio-app [--out <dir>] [--out-format <xyz|pcd|ply>] [--sim] | [--live <config.json> [--scan-ms <ms>]]
+usage: fast-lio-app [common opts] --sim | --driver <name> [driver opts]
+
+common opts:
+  --out <dir>              output directory (default "out")
+  --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)
+  --scan-ms <ms>           scan frame period in ms (default 100)
+
+modes:
+  --sim                    synthetic demo data (default)
+  --driver <name>          connect to a real LiDAR. Supported names:
+    livox                  Livox (HAP / Mid-360) via SDK2, needs --config
+    velodyne | ouster | hesai | marsim   spinning LiDAR (adapter may be WIP)
+
+driver opts:
+  --config <file>          vendor config file (Livox SDK2 JSON)
+  --ip <addr>              LiDAR network address (spinning LiDARs)
+  --port <port>            UDP data port (spinning LiDARs)
+
+examples:
+  fast-lio-app --sim
+  fast-lio-app --driver livox --config mid360_config.json
+  fast-lio-app --driver velodyne --ip 192.168.1.100 --port 2368
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--sim` | — | Run on the synthetic `SimSource` demo (mutually exclusive with `--live`). |
-| `--live <config.json>` | — | Connect to a Livox LiDAR via SDK2 (no ROS). `<config.json>` is the Livox config file (the same one used by Livox Viewer / driver2). |
+| `--sim` | — | Run on the synthetic `SimSource` demo (mutually exclusive with `--driver`). |
+| `--driver <name>` | — | Select the LiDAR driver by name (`livox`, `velodyne`, `ouster`, `hesai`, `marsim`). Unknown names are rejected by `open()` with an actionable error. |
+| `--config <file>` | — | Vendor config file (Livox SDK2 JSON, the same one used by Livox Viewer / driver2). |
+| `--ip <addr>` | — | LiDAR network address (spinning LiDARs). |
+| `--port <port>` | — | UDP data port for the spinning-LiDAR packet stream. |
 | `--scan-ms <ms>` | `100` | LiDAR scan frame period in milliseconds (10 Hz → 100). Lower = higher scan rate. |
 | `--out <dir>` | `out` | Output directory for the trajectory and map files (created if missing). |
 | `--out-format <fmt>` | `xyz` | Map file format: `xyz`, `pcd`, or `ply`. See [Outputs](#outputs). |
 
 Notes:
 
-- The `--live` mode builds **direct odometry mode** (`feature_extract_enable = false`): the SDK2 stream is routed through a single scan line because per-point ring indices are not exposed by the SDK. This is the robust default for Livox.
+- `--live <config>` is kept as a **backwards-compatible alias** for `--driver livox --config <config>`.
+- Adding a new LiDAR brand only requires implementing its adapter in
+  `fast-lio-driver` and registering it in `open()`; the CLI needs **no change**
+  (see [`fast-lio-driver`](crates/fast-lio-driver)).
+- The `livox` driver runs in **direct odometry mode** (`feature_extract_enable = false`): the SDK2 stream is routed through a single scan line because per-point ring indices are not exposed by the SDK. Spinning LiDARs use the per-point `ring`/`time` fields instead.
 - The **IMU accel is converted from g to m/s²** (see `ACC_G_TO_MPS2` in `crates/fast-lio-driver/src/livox.rs`; set it to `1.0` if your firmware reports m/s² directly).
 - Frame timestamps use a local monotonic clock (arrival time). If you need exact PTP/UTC synchronization, `Packet::timestamp()` is exposed for that.
 

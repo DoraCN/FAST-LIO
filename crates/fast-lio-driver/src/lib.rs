@@ -34,25 +34,47 @@ pub use fast_lio::types::{LidarType, SensorData};
 ///
 /// Per-driver fields are optional; each adapter reads only what it needs:
 /// - [`LidarType::Avia`] → Livox (needs `config_path` = Livox JSON config)
-/// - spinning LiDARs (Velo16 / Oust64 / Marsim) → need `udp_ip` / port (TBD)
+/// - spinning LiDARs (Velo16 / Oust64 / Marsim) → need `udp_ip` / `udp_port`
 #[derive(Clone, Debug)]
 pub struct DriverParams {
     /// Which driver to construct.
     pub lidar_type: LidarType,
-    /// Livox SDK2 config file (for Livox devices).
+    /// Vendor config file (Livox SDK2 JSON config).
     pub config_path: Option<String>,
-    /// UDP address of a spinning LiDAR (for future drivers).
+    /// Network address of the LiDAR (spinning-LiDAR UDP, or SDK broadcast).
     pub udp_ip: Option<String>,
+    /// UDP port for spinning-LiDAR packet streams.
+    pub udp_port: Option<u16>,
     /// Grouping period for one lidar scan frame.
     pub scan_period: Duration,
 }
 
 impl DriverParams {
+    /// Build params for any driver from its [`LidarType`] plus optional fields.
+    /// This is the generic entry point used by the CLI; `open` picks the
+    /// matching adapter and rejects the ones not yet implemented.
+    pub fn new(
+        lidar_type: LidarType,
+        config_path: Option<String>,
+        udp_ip: Option<String>,
+        udp_port: Option<u16>,
+        scan_period: Duration,
+    ) -> Self {
+        Self {
+            lidar_type,
+            config_path,
+            udp_ip,
+            udp_port,
+            scan_period,
+        }
+    }
+
     pub fn livox(config_path: impl Into<String>, scan_period: Duration) -> Self {
         Self {
             lidar_type: LidarType::Avia,
             config_path: Some(config_path.into()),
             udp_ip: None,
+            udp_port: None,
             scan_period,
         }
     }
