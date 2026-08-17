@@ -12,5 +12,5 @@ default = []
 livox-sdk2 = ["dep:livox-sdk2"]
 
 [dependencies]
-fast-lio = { path = "../fast-lio" }
+fast-lio = { path = "../fast-lio", version = "0.1" }
 livox-sdk2 = { version = "0.1", optional = true }

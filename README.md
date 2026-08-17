@@ -172,9 +172,9 @@ examples:
 | `--port <port>` | — | UDP data port for the spinning-LiDAR packet stream. |
 | `--scan-ms <ms>` | `100` | LiDAR scan frame period in milliseconds (10 Hz → 100). Lower = higher scan rate. |
 | `--duration <secs>` | — | Auto-stop after N seconds and save the map. Default runs until Ctrl-C. |
-| `--map-voxel <m>` | `0.5` | Global-map voxel size (m). **Smaller = denser saved map** (e.g. `0.1`). |
-| `--surf-voxel <m>` | `0.5` | Per-frame scan voxel size (m); keep consistent with `--map-voxel`. |
-| `--point-filter-num <n>` | `2` | Keep every Nth point; `1` keeps all points (denser but slower). |
+| `--map-voxel <m>` | `0.5` | Global-map voxel size (m). Range: **> 0**, practical **≥ 0.05**. Smaller = denser saved map (e.g. `0.1`). |
+| `--surf-voxel <m>` | `0.5` | Per-frame scan voxel size (m). Range: **> 0**, practical **≥ 0.05**; keep consistent with `--map-voxel`. |
+| `--point-filter-num <n>` | `2` | Keep every Nth point. Range: **≥ 1** (`1` = keep all points, densest but slowest). |
 | `--out <dir>` | `out` | Output directory for the trajectory and map files (created if missing). |
 | `--out-format <fmt>` | `pcd` | Map file format: `xyz`, `pcd`, or `ply`. See [Outputs](#outputs). |
 
@@ -221,7 +221,7 @@ Add the core crate as a dependency and feed it sensor data. The core is **purely
 
 ```toml
 [dependencies]
-fast-lio = { path = "../fast-lio" }   # or a version tag once published
+fast-lio = "0.1"
 ```
 
 ### 2. Implement the data source
