@@ -131,6 +131,9 @@ common opts:
   --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)
   --scan-ms <ms>           scan frame period in ms (default 100)
   --duration <secs>        auto-stop after N seconds and save (default: run until Ctrl-C)
+  --map-voxel <m>           global map voxel size (default 0.5; smaller = denser)
+  --surf-voxel <m>          per-frame scan voxel size (default 0.5)
+  --point-filter-num <n>    keep every Nth point (default 2; 1 = keep all)
 
 modes:
   --sim                    synthetic demo data (default)
@@ -158,6 +161,9 @@ examples:
 | `--port <port>` | — | UDP data port for the spinning-LiDAR packet stream. |
 | `--scan-ms <ms>` | `100` | LiDAR scan frame period in milliseconds (10 Hz → 100). Lower = higher scan rate. |
 | `--duration <secs>` | — | Auto-stop after N seconds and save the map. Default runs until Ctrl-C. |
+| `--map-voxel <m>` | `0.5` | Global-map voxel size (m). **Smaller = denser saved map** (e.g. `0.1`). |
+| `--surf-voxel <m>` | `0.5` | Per-frame scan voxel size (m); keep consistent with `--map-voxel`. |
+| `--point-filter-num <n>` | `2` | Keep every Nth point; `1` keeps all points (denser but slower). |
 | `--out <dir>` | `out` | Output directory for the trajectory and map files (created if missing). |
 | `--out-format <fmt>` | `pcd` | Map file format: `xyz`, `pcd`, or `ply`. See [Outputs](#outputs). |
 

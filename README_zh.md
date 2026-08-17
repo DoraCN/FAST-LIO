@@ -123,6 +123,9 @@ common opts:
   --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)
   --scan-ms <ms>           scan frame period in ms (default 100)
   --duration <secs>        auto-stop after N seconds and save (default: run until Ctrl-C)
+  --map-voxel <m>           global map voxel size (default 0.5; smaller = denser)
+  --surf-voxel <m>          per-frame scan voxel size (default 0.5)
+  --point-filter-num <n>    keep every Nth point (default 2; 1 = keep all)
 
 modes:
   --sim                    synthetic demo data (default)
@@ -150,6 +153,9 @@ examples:
 | `--port <port>` | — | 机械式雷达点云包的 UDP 数据端口。 |
 | `--scan-ms <ms>` | `100` | 激光雷达扫描帧周期（毫秒）（10 Hz → 100）。越小帧率越高。 |
 | `--duration <secs>` | — | 运行 N 秒后自动停止并保存地图。默认一直运行直到 Ctrl-C。 |
+| `--map-voxel <m>` | `0.5` | 全局地图体素尺寸（m）。**越小地图越密**（如 `0.1`）。 |
+| `--surf-voxel <m>` | `0.5` | 逐帧扫描体素尺寸（m）；建议与 `--map-voxel` 一致。 |
+| `--point-filter-num <n>` | `2` | 每隔 N 个点保留一个；`1` 保留全部点（更密但更慢）。 |
 | `--out <dir>` | `out` | 轨迹和地图文件的输出目录（不存在会自动创建）。 |
 | `--out-format <fmt>` | `pcd` | 地图文件格式：`xyz`、`pcd` 或 `ply`。见[输出文件](#输出文件)。 |
 

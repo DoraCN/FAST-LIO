@@ -44,6 +44,9 @@ fn usage() -> ! {
          \x20 --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)\n\
          \x20 --scan-ms <ms>           scan frame period in ms (default 100)\n\
          \x20 --duration <secs>        auto-stop after N seconds and save (default: run until Ctrl-C)\n\
+         \x20 --map-voxel <m>           global map voxel size (default 0.5; smaller = denser)\n\
+         \x20 --surf-voxel <m>          per-frame scan voxel size (default 0.5)\n\
+         \x20 --point-filter-num <n>    keep every Nth point (default 2; 1 = keep all)\n\
          \n\
          modes:\n\
          \x20 --sim                    synthetic demo data (default)\n\
@@ -73,6 +76,9 @@ fn main() {
     let mut udp_port: Option<u16> = None;
     let mut scan_ms: f64 = 100.0;
     let mut duration: Option<f64> = None;
+    let mut map_voxel: Option<f32> = None;
+    let mut surf_voxel: Option<f32> = None;
+    let mut point_filter_num: Option<i32> = None;
     let mut sim = false;
 
     let mut args = std::env::args().skip(1);
@@ -113,6 +119,36 @@ fn main() {
                 )
             }
             "--scan-ms" => scan_ms = args.next().unwrap_or_else(|| usage()).parse().unwrap_or_else(|_| usage()),
+            "--map-voxel" => {
+                map_voxel = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|v| *v > 0.0);
+                if map_voxel.is_none() {
+                    eprintln!("--map-voxel expects meters (e.g. --map-voxel 0.1)");
+                    usage();
+                }
+            }
+            "--surf-voxel" => {
+                surf_voxel = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|v| *v > 0.0);
+                if surf_voxel.is_none() {
+                    eprintln!("--surf-voxel expects meters (e.g. --surf-voxel 0.1)");
+                    usage();
+                }
+            }
+            "--point-filter-num" => {
+                point_filter_num = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|v| *v > 0);
+                if point_filter_num.is_none() {
+                    eprintln!("--point-filter-num expects an integer >= 1 (1 = keep all)");
+                    usage();
+                }
+            }
             _ => usage(),
         }
     }
@@ -129,6 +165,11 @@ fn main() {
             std::process::exit(2);
         }),
     };
+    // density overrides: smaller map/surf voxels or a smaller point-filter
+    // interval produce a denser saved map
+    let filter_size_map = map_voxel.unwrap_or(0.5);
+    let filter_size_surf = surf_voxel.unwrap_or(0.5);
+    let point_filter_num = point_filter_num.unwrap_or(2);
     let cfg = match lidar_type {
         LidarType::Avia => {
             // Direct odometry mode (no feature extraction): robust for Livox and
@@ -137,12 +178,12 @@ fn main() {
             LioConfig {
                 lidar_type: LidarType::Avia,
                 feature_extract_enable: false,
-                point_filter_num: 2,
+                point_filter_num,
                 n_scans: 6,
                 scan_rate: 10,
                 timestamp_unit: TimeUnit::Us,
-                filter_size_surf: 0.5,
-                filter_size_map: 0.5,
+                filter_size_surf,
+                filter_size_map,
                 gyr_cov: 0.1,
                 acc_cov: 0.1,
                 b_gyr_cov: 0.0001,
@@ -156,12 +197,12 @@ fn main() {
             LioConfig {
                 lidar_type,
                 feature_extract_enable: false,
-                point_filter_num: 2,
+                point_filter_num,
                 n_scans: 16,
                 scan_rate: 10,
                 timestamp_unit: TimeUnit::Ms,
-                filter_size_surf: 0.5,
-                filter_size_map: 0.5,
+                filter_size_surf,
+                filter_size_map,
                 gyr_cov: 0.1,
                 acc_cov: 0.1,
                 b_gyr_cov: 0.0001,
@@ -170,6 +211,9 @@ fn main() {
             }
         }
     };
+    println!(
+        "density: filter_size_map={filter_size_map}, filter_size_surf={filter_size_surf}, point_filter_num={point_filter_num}"
+    );
 
     // ---- data source ----------------------------------------------------
     let mut source: Box<dyn DataSource> = if let Some(name) = driver_name {
