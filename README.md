@@ -1,11 +1,11 @@
-# fast-lio
+# FAST-LIO
 
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 [![edition](https://img.shields.io/badge/edition-2024-orange)](Cargo.toml)
 
 **Languages:** English · [简体中文](README_zh.md)
 
-**fast-lio** is a pure-Rust, dependency-light port of [FAST-LIO2](https://github.com/hku-mars/FAST_LIO) — a computationally efficient, robust tightly-coupled LiDAR-inertial odometry (LIO) system. It fuses raw LiDAR points with IMU data using an iterated error-state Kalman filter (IEKF) on a manifold and maintains an incremental k-d tree (ikd-Tree) map, enabling accurate, drift-bounded odometry and mapping at high rates.
+**FAST-LIO** is a pure-Rust, dependency-light port of [FAST-LIO2](https://github.com/hku-mars/FAST_LIO) — a computationally efficient, robust tightly-coupled LiDAR-inertial odometry (LIO) system. It fuses raw LiDAR points with IMU data using an iterated error-state Kalman filter (IEKF) on a manifold and maintains an incremental k-d tree (ikd-Tree) map, enabling accurate, drift-bounded odometry and mapping at high rates.
 
 The core crate contains **no I/O or ROS dependencies**: the whole front-end is a plain library that consumes timestamped IMU samples and LiDAR scans and produces poses, velocity, biases and the local map. This makes it easy to embed, unit-test, and drive from any data source (rosbag, custom file format, live sensors).
 

@@ -1,11 +1,11 @@
-# fast-lio
+# FAST-LIO
 
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 [![edition](https://img.shields.io/badge/edition-2024-orange)](Cargo.toml)
 
 **语言:** [English](README.md) · 简体中文
 
-**fast-lio** 是 [FAST-LIO2](https://github.com/hku-mars/FAST_LIO) 的纯 Rust 移植版本——一个计算高效、鲁棒的紧耦合 LiDAR-惯性里程计（LIO）系统。它使用流形上的迭代误差状态卡尔曼滤波（IEKF）将原始 LiDAR 点云与 IMU 数据紧耦合融合，并维护增量 k-d 树（ikd-Tree）地图，从而实现高频率、低漂移的里程计与建图。
+**FAST-LIO** 是 [FAST-LIO2](https://github.com/hku-mars/FAST_LIO) 的纯 Rust 移植版本——一个计算高效、鲁棒的紧耦合 LiDAR-惯性里程计（LIO）系统。它使用流形上的迭代误差状态卡尔曼滤波（IEKF）将原始 LiDAR 点云与 IMU 数据紧耦合融合，并维护增量 k-d 树（ikd-Tree）地图，从而实现高频率、低漂移的里程计与建图。
 
 核心 crate **不包含任何 I/O 或 ROS 依赖**：整个前端是一个纯库，只消费带时间戳的 IMU 样本和 LiDAR 扫描帧，输出位姿、速度、偏置和局部地图。因此可以轻松嵌入、单元测试，并从任意数据源（rosbag、自定义文件格式、实时传感器）驱动。
 
