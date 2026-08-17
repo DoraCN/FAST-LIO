@@ -4,5 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Path planning and navigation on top of the lidar map"
+repository.workspace = true
+readme = "README.md"
 
 [dependencies]
