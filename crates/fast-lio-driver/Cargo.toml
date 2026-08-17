@@ -3,7 +3,7 @@ name = "fast-lio-driver"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Driver adapters for LiDAR + IMU data sources feeding the fast-lio core"
+description = "Driver adapters for LiDAR + IMU data sources feeding the FAST-LIO core"
 repository.workspace = true
 readme = "README.md"
 

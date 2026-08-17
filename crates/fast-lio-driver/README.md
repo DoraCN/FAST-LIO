@@ -1,4 +1,4 @@
-# fast-lio-driver
+# FAST-LIO Driver
 
 Device adapters that feed the [`fast-lio`](https://crates.io/crates/fast-lio)
 core with normalized [`SensorData`]. The algorithm core never touches a vendor

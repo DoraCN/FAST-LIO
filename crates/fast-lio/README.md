@@ -1,4 +1,4 @@
-# fast-lio
+# FAST-LIO
 
 Pure-Rust, dependency-light port of [FAST-LIO2](https://github.com/hku-mars/FAST_LIO):
 a tightly-coupled LiDAR-inertial odometry (LIO) system using an iterated
