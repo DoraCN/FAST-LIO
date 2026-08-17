@@ -115,7 +115,7 @@ cargo run -p fast-lio-app --release -- --sim --out my_output
 The demo drives the whole pipeline with the built-in `SimSource` and produces:
 
 - `pos_log.txt` — per-frame pose (time, euler angles, position, velocity, gyro bias), the same format as the C++ node;
-- `map.xyz` (or `.pcd` / `.ply`, see [`--out-format`](#command-line-reference)) — the world-frame map points stored in the ikd-Tree.
+- `map.pcd` (default; or `.xyz` / `.ply`, see [`--out-format`](#command-line-reference)) — the world-frame map points stored in the ikd-Tree.
 
 ## Command line reference
 
@@ -128,7 +128,7 @@ usage: fast-lio-app [common opts] --sim | --driver <name> [driver opts]
 
 common opts:
   --out <dir>              output directory (default "out")
-  --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)
+  --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)
   --scan-ms <ms>           scan frame period in ms (default 100)
 
 modes:
@@ -157,7 +157,7 @@ examples:
 | `--port <port>` | — | UDP data port for the spinning-LiDAR packet stream. |
 | `--scan-ms <ms>` | `100` | LiDAR scan frame period in milliseconds (10 Hz → 100). Lower = higher scan rate. |
 | `--out <dir>` | `out` | Output directory for the trajectory and map files (created if missing). |
-| `--out-format <fmt>` | `xyz` | Map file format: `xyz`, `pcd`, or `ply`. See [Outputs](#outputs). |
+| `--out-format <fmt>` | `pcd` | Map file format: `xyz`, `pcd`, or `ply`. See [Outputs](#outputs). |
 
 Notes:
 
@@ -307,8 +307,8 @@ The app writes, per run:
 | File | Format | Description |
 |---|---|---|
 | `pos_log.txt` | text | trajectory in the C++ `dump_lio_state_to_log` format: `time RPY(deg) pos vel bg` |
-| `map.xyz` | text (`x y z` per line) | the accumulated world-frame map (default) |
-| `map.pcd` | ASCII PCD | `x y z intensity` — readable by PCL / rviz tools (via `--out-format pcd`) |
+| `map.pcd` | ASCII PCD | `x y z intensity` — readable by PCL / rviz tools (default) |
+| `map.xyz` | text (`x y z` per line) | the accumulated world-frame map (via `--out-format xyz`) |
 | `map.ply` | ASCII PLY | `x y z intensity` — opens directly in CloudCompare / MeshLab (via `--out-format ply`) |
 
 > `intensity` is the raw LiDAR reflectivity passed through from the sensor

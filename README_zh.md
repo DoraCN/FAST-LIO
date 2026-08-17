@@ -109,7 +109,7 @@ cargo run -p fast-lio-app --release -- --sim --out my_output
 演示使用内置的 `SimSource` 驱动整个流水线，输出：
 
 - `pos_log.txt` — 每帧位姿（时间、欧拉角、位置、速度、陀螺仪偏置），与 C++ 节点格式一致；
-- `map.xyz`（或 `.pcd` / `.ply`，见[`--out-format`](#命令行参考)）— ikd-Tree 中存储的世界系地图点。
+- `map.pcd`（默认；或 `.xyz` / `.ply`，见[`--out-format`](#命令行参考)）— ikd-Tree 中存储的世界系地图点。
 
 ## 命令行参考
 
@@ -120,7 +120,7 @@ usage: fast-lio-app [common opts] --sim | --driver <name> [driver opts]
 
 common opts:
   --out <dir>              output directory (default "out")
-  --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)
+  --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)
   --scan-ms <ms>           scan frame period in ms (default 100)
 
 modes:
@@ -149,7 +149,7 @@ examples:
 | `--port <port>` | — | 机械式雷达点云包的 UDP 数据端口。 |
 | `--scan-ms <ms>` | `100` | 激光雷达扫描帧周期（毫秒）（10 Hz → 100）。越小帧率越高。 |
 | `--out <dir>` | `out` | 轨迹和地图文件的输出目录（不存在会自动创建）。 |
-| `--out-format <fmt>` | `xyz` | 地图文件格式：`xyz`、`pcd` 或 `ply`。见[输出文件](#输出文件)。 |
+| `--out-format <fmt>` | `pcd` | 地图文件格式：`xyz`、`pcd` 或 `ply`。见[输出文件](#输出文件)。 |
 
 注意事项：
 
@@ -290,8 +290,8 @@ cargo run -p fast-lio-app --release -- --live mid360_config.json [--scan-ms 100]
 | 文件 | 格式 | 说明 |
 |---|---|---|
 | `pos_log.txt` | 文本 | 轨迹，C++ `dump_lio_state_to_log` 格式：`time RPY(deg) pos vel bg` |
-| `map.xyz` | 文本（每行 `x y z`） | 累积的世界系地图（默认） |
-| `map.pcd` | ASCII PCD | `x y z intensity` —— PCL / rviz 工具可读（通过 `--out-format pcd`） |
+| `map.pcd` | ASCII PCD | `x y z intensity` —— PCL / rviz 工具可读（默认） |
+| `map.xyz` | 文本（每行 `x y z`） | 累积的世界系地图（通过 `--out-format xyz`） |
 | `map.ply` | ASCII PLY | `x y z intensity` —— CloudCompare / MeshLab 可直接打开（通过 `--out-format ply`） |
 
 > `intensity` 是从传感器透传的原始 LiDAR 反射强度（Livox 为 SDK2 的 `reflectivity` 0–255；合成演示固定填 `100.0`）。算法不使用该值。

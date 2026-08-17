@@ -39,7 +39,7 @@ fn usage() -> ! {
          \n\
          common opts:\n\
          \x20 --out <dir>              output directory (default \"out\")\n\
-         \x20 --out-format <fmt>       map file format: xyz | pcd | ply (default xyz)\n\
+         \x20 --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)\n\
          \x20 --scan-ms <ms>           scan frame period in ms (default 100)\n\
          \n\
          modes:\n\
@@ -63,7 +63,7 @@ fn usage() -> ! {
 
 fn main() {
     let mut out_dir = "out".to_string();
-    let mut out_format = MapFormat::Xyz;
+    let mut out_format = MapFormat::Pcd;
     let mut driver_name: Option<String> = None;
     let mut config_path: Option<String> = None;
     let mut udp_ip: Option<String> = None;
