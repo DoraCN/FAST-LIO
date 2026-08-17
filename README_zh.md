@@ -40,7 +40,7 @@
 - **解耦驱动层** — 所有硬件访问都位于 `fast-lio-driver` crate 中（每种品牌一个模块，重型厂商 SDK 用 feature 隔离）；算法核心从不接触厂商 SDK。
 - **实时 Livox 支持（无需 ROS）** — `fast-lio-driver` 通过官方 Livox SDK2（经由 `livox-sdk2` crate）直接连接 HAP / Mid-360 激光雷达，并将点云 + 内置 IMU 推入流水线。
 - 数值保真的移植，逐模块对照 C++ 实现验证（见[测试](#测试)）。
-- 为完整自主栈预留：`lidar-map`（占据/体素地图）和 `lidar-nav`（规划/导航）crate。
+- 为完整自主栈提供服务：`lidar-map`（占据/体素地图）和 `lidar-nav`（规划/导航）crate。
 
 ## 状态
 
@@ -56,7 +56,8 @@
 | 离线驱动 + 合成数据源 | `crates/fast-lio-app` | ✅ 端到端 |
 | 实时 Livox SDK2 数据源（`livox-sdk2` feature） | `crates/fast-lio-driver/src/livox.rs` | ✅ 可编译（需硬件验证） |
 | 真实数据集验证（C++ 黄金对比） | — | 🔜 待数据集 |
-| `lidar-map` / `lidar-nav` | — | 🔜 规划中 |
+| `lidar-map` | `crates/lidar-map` | ✅ 栅格 + 体素 + CLI 示例 |
+| `lidar-nav` | `crates/lidar-nav` | ✅ A* + DWA + CLI 示例 |
 
 ## 工作区结构
 
@@ -82,8 +83,8 @@ fast-lio/
     │       ├── velodyne.rs    #   机械式 LiDAR（开发中）
     │       ├── ouster.rs      #   机械式 LiDAR（开发中）
     │       └── hesai.rs       #   机械式 LiDAR（开发中）
-    ├── lidar-map/             # （占位）占据/体素地图 —— 未来
-    ├── lidar-nav/             # （占位）规划与导航 —— 未来
+    ├── lidar-map/             # 占据栅格 + 体素地图（GridMap / VoxelMap）
+    ├── lidar-nav/             # 路径规划（A*）+ 局部避障（DWA）
     └── fast-lio-app/          # 离线/实时驱动二进制（不发布）
 ```
 
@@ -322,7 +323,7 @@ cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.jso
 ## 测试
 
 ```bash
-cargo test --workspace       # 42 个单元测试
+cargo test --workspace       # 61 个单元测试
 cargo clippy --workspace --all-targets
 ```
 

@@ -8,3 +8,4 @@ repository.workspace = true
 readme = "README.md"
 
 [dependencies]
+image = "0.25"

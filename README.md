@@ -40,7 +40,7 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
 - **Decoupled driver layer** — all hardware access lives in the `fast-lio-driver` crate (one module per brand, heavy vendor SDKs feature-gated); the algorithm core never sees a vendor SDK.
 - **Live Livox support (no ROS)** — `fast-lio-driver` connects directly to HAP / Mid-360 LiDARs through the official Livox SDK2 (via the `livox-sdk2` crate) and streams point clouds + the built-in IMU into the pipeline.
 - Numerically faithful port, verified against the C++ implementation module by module (see [Testing](#testing)).
-- Workspace-ready for the full autonomy stack: `lidar-map` (occupancy/voxel map) and `lidar-nav` (planning/navigation) crates are reserved.
+- Workspace-ready for the full autonomy stack: `lidar-map` (occupancy/voxel map) and `lidar-nav` (planning/navigation) crates.
 
 ## Status
 
@@ -56,7 +56,8 @@ The core crate contains **no I/O or ROS dependencies**: the whole front-end is a
 | Offline driver + synthetic data source | `crates/fast-lio-app` | ✅ end-to-end |
 | Live Livox SDK2 source (`livox-sdk2` feature) | `crates/fast-lio-driver/src/livox.rs` | ✅ builds (needs hardware to verify) |
 | Real-dataset validation (C++ golden comparison) | — | 🔜 pending dataset |
-| `lidar-map` / `lidar-nav` | — | 🔜 planned |
+| `lidar-map` | `crates/lidar-map` | ✅ grid + voxel + CLI example |
+| `lidar-nav` | `crates/lidar-nav` | ✅ A* + DWA + CLI example |
 
 ## Workspace layout
 
@@ -82,8 +83,8 @@ fast-lio/
     │       ├── velodyne.rs    #   spinning LiDAR (WIP)
     │       ├── ouster.rs      #   spinning LiDAR (WIP)
     │       └── hesai.rs       #   spinning LiDAR (WIP)
-    ├── lidar-map/             # (placeholder) occupancy / voxel map — future
-    ├── lidar-nav/             # (placeholder) planning & navigation — future
+    ├── lidar-map/             # occupancy grid + voxel map (GridMap / VoxelMap)
+    ├── lidar-nav/             # path planning (A*) + local avoidance (DWA)
     └── fast-lio-app/          # offline/live driver binary (not published)
 ```
 
@@ -343,7 +344,7 @@ All formats are directly comparable with logs produced by the C++ implementation
 ## Testing
 
 ```bash
-cargo test --workspace       # 42 unit tests
+cargo test --workspace       # 61 unit tests
 cargo clippy --workspace --all-targets
 ```
 
@@ -371,7 +372,7 @@ End-to-end: the `fast-lio-app` demo processes ~200 frames of synthetic data and 
 3. `DataSource` implementations for rosbag / custom files.
 4. `lidar-map`: incremental occupancy / voxel map for planning.
 5. `lidar-nav`: path planning and obstacle avoidance on top of the map.
-6. Publish `fast-lio` (and later `lidar-map`, `lidar-nav`) to crates.io.
+6. Publish `fast-lio` (and `lidar-map`, `lidar-nav`) to crates.io.
 
 ## Attribution & license
 

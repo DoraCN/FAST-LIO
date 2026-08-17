@@ -1,6 +1,21 @@
-//! Placeholder for the planning/navigation crate (WIP milestone).
+//! Path planning and navigation on top of the lidar map.
 //!
-//! Will provide global/local path planning and obstacle avoidance using the map
-//! produced by `lidar-map`.
+//! This crate turns the occupancy map produced by [`lidar_map`] into executable
+//! robot motion:
+//!
+//! - [`astar`] — grid-based global path planning (A*) that finds a collision-free
+//!   route from a start to a goal on a [`GridMap`](lidar_map::GridMap).
+//! - [`dwa`] — local obstacle avoidance (Dynamic Window Approach) that follows
+//!   the global path while reacting to nearby obstacles in real time.
+//!
+//! ```text
+//! lidar_map::GridMap  +  robot pose
+//!     → astar (global plan)
+//!     → dwa (local control: linear + angular velocity)
+//! ```
 
-// TODO(lidar-nav): A*/RRT/DWA/TEB style planners + collision avoidance
+pub mod astar;
+pub mod dwa;
+
+pub use astar::{astar, AStarOptions, Waypoint};
+pub use dwa::{DwaParams, DwaState, dwa_step};
