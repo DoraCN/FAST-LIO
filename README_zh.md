@@ -122,6 +122,7 @@ common opts:
   --out <dir>              output directory (default "out")
   --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)
   --scan-ms <ms>           scan frame period in ms (default 100)
+  --duration <secs>        auto-stop after N seconds and save (default: run until Ctrl-C)
 
 modes:
   --sim                    synthetic demo data (default)
@@ -148,6 +149,7 @@ examples:
 | `--ip <addr>` | — | 激光雷达网络地址（机械式雷达）。 |
 | `--port <port>` | — | 机械式雷达点云包的 UDP 数据端口。 |
 | `--scan-ms <ms>` | `100` | 激光雷达扫描帧周期（毫秒）（10 Hz → 100）。越小帧率越高。 |
+| `--duration <secs>` | — | 运行 N 秒后自动停止并保存地图。默认一直运行直到 Ctrl-C。 |
 | `--out <dir>` | `out` | 轨迹和地图文件的输出目录（不存在会自动创建）。 |
 | `--out-format <fmt>` | `pcd` | 地图文件格式：`xyz`、`pcd` 或 `ply`。见[输出文件](#输出文件)。 |
 
@@ -271,8 +273,10 @@ while let Some(sample) = data_source.next() {
 启用 `livox-sdk2` feature（`fast-lio-app` 默认启用）后，`fast-lio-driver` crate 会**通过以太网直接连接激光雷达**，无需 ROS：
 
 ```bash
-cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json [--scan-ms 100]
+cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json [--scan-ms 100] [--duration 120]
 ```
+
+程序会持续运行直到 **Ctrl-C**（优雅退出：保存轨迹与地图）或 `--duration <secs>` 到时自动停止。
 
 要求与注意事项：
 

@@ -130,6 +130,7 @@ common opts:
   --out <dir>              output directory (default "out")
   --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)
   --scan-ms <ms>           scan frame period in ms (default 100)
+  --duration <secs>        auto-stop after N seconds and save (default: run until Ctrl-C)
 
 modes:
   --sim                    synthetic demo data (default)
@@ -156,6 +157,7 @@ examples:
 | `--ip <addr>` | — | LiDAR network address (spinning LiDARs). |
 | `--port <port>` | — | UDP data port for the spinning-LiDAR packet stream. |
 | `--scan-ms <ms>` | `100` | LiDAR scan frame period in milliseconds (10 Hz → 100). Lower = higher scan rate. |
+| `--duration <secs>` | — | Auto-stop after N seconds and save the map. Default runs until Ctrl-C. |
 | `--out <dir>` | `out` | Output directory for the trajectory and map files (created if missing). |
 | `--out-format <fmt>` | `pcd` | Map file format: `xyz`, `pcd`, or `ply`. See [Outputs](#outputs). |
 
@@ -285,8 +287,11 @@ With the `livox-sdk2` feature (enabled by default in `fast-lio-app`), the
 `fast-lio-driver` crate connects **directly to the LiDAR over the network**, no ROS involved:
 
 ```bash
-cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json [--scan-ms 100]
+cargo run -p fast-lio-app --release -- --driver livox --config mid360_config.json [--scan-ms 100] [--duration 120]
 ```
+
+The program streams until **Ctrl-C** (graceful exit: trajectory + map are saved) or
+`--duration <secs>` elapses.
 
 Requirements and notes:
 

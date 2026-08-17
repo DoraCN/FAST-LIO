@@ -27,7 +27,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use livox_sdk2::{Packet, Sdk};
 
-use fast_lio::data_source::DataSource;
+use fast_lio::data_source::{DataSource, NonBlocking};
 use fast_lio::types::{AviaMsg, AviaPointMsg, ImuRaw, SensorData};
 
 /// Convert the SDK2 IMU accel (g) into m/s². Set to `1.0` if the device
@@ -175,5 +175,13 @@ impl LivoxSource {
 impl DataSource for LivoxSource {
     fn next(&mut self) -> Option<SensorData> {
         self.rx.recv().ok()
+    }
+
+    fn try_next(&mut self) -> Result<Option<SensorData>, NonBlocking> {
+        match self.rx.try_recv() {
+            Ok(data) => Ok(Some(data)),
+            Err(mpsc::TryRecvError::Empty) => Err(NonBlocking),
+            Err(mpsc::TryRecvError::Disconnected) => Ok(None),
+        }
     }
 }

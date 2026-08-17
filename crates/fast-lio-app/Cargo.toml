@@ -13,3 +13,4 @@ livox-sdk2 = ["fast-lio-driver/livox-sdk2"]
 [dependencies]
 fast-lio = { path = "../fast-lio" }
 fast-lio-driver = { path = "../fast-lio-driver", features = ["livox-sdk2"] }
+ctrlc = "3"

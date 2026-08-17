@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use fast_lio::data_source::{DataSource, SimParams, SimSource};
 use fast_lio::laser_mapping::{LaserMapping, LioConfig, LioResult};
@@ -41,6 +43,7 @@ fn usage() -> ! {
          \x20 --out <dir>              output directory (default \"out\")\n\
          \x20 --out-format <fmt>       map file format: xyz | pcd | ply (default pcd)\n\
          \x20 --scan-ms <ms>           scan frame period in ms (default 100)\n\
+         \x20 --duration <secs>        auto-stop after N seconds and save (default: run until Ctrl-C)\n\
          \n\
          modes:\n\
          \x20 --sim                    synthetic demo data (default)\n\
@@ -55,7 +58,7 @@ fn usage() -> ! {
          \n\
          examples:\n\
          \x20 fast-lio-app --sim\n\
-         \x20 fast-lio-app --driver livox --config mid360_config.json\n\
+         \x20 fast-lio-app --driver livox --config mid360_config.json --duration 120\n\
          \x20 fast-lio-app --driver velodyne --ip 192.168.1.100 --port 2368"
     );
     std::process::exit(2);
@@ -69,6 +72,7 @@ fn main() {
     let mut udp_ip: Option<String> = None;
     let mut udp_port: Option<u16> = None;
     let mut scan_ms: f64 = 100.0;
+    let mut duration: Option<f64> = None;
     let mut sim = false;
 
     let mut args = std::env::args().skip(1);
@@ -80,6 +84,16 @@ fn main() {
                     .next()
                     .and_then(|s| MapFormat::parse(&s))
                     .unwrap_or_else(|| usage())
+            }
+            "--duration" => {
+                duration = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|d| *d > 0.0);
+                if duration.is_none() {
+                    eprintln!("--duration expects seconds (e.g. --duration 120)");
+                    usage();
+                }
             }
             "--sim" => sim = true,
             // backwards-compatible alias: --live <config> == --driver livox --config <config>
@@ -201,19 +215,53 @@ fn main() {
     let mut n_frames = 0u64;
     let mut n_skipped = 0u64;
 
-    while let Some(data) = source.next() {
-        n_sensor += 1;
-        match data {
-            SensorData::Imu(imu) => mapping.add_imu(&imu),
-            SensorData::LidarAvia(msg) => mapping.add_lidar_avia(&msg),
-            SensorData::LidarStandard(msg) => mapping.add_lidar_standard(&msg),
+    // Ctrl-C -> graceful stop & save (like the C++ node).
+    let done = Arc::new(AtomicBool::new(false));
+    ctrlc::set_handler({
+        let done = done.clone();
+        move || done.store(true, Ordering::SeqCst)
+    })
+    .expect("install Ctrl-C handler");
+    if let Some(d) = duration {
+        println!("auto-stop: saving after {d} s (or Ctrl-C to stop now)");
+    } else {
+        println!("running ... press Ctrl-C to stop and save the map");
+    }
+
+    let t0 = Instant::now();
+    let mut last_progress = Instant::now();
+    loop {
+        let timed_out = duration.is_some_and(|d| t0.elapsed().as_secs_f64() >= d);
+        if done.load(Ordering::SeqCst) || timed_out {
+            break;
         }
-        if mapping.has_data() {
-            if let Some(res) = mapping.run_once() {
-                results.push(res);
-                n_frames += 1;
-            } else {
-                n_skipped += 1;
+        match source.try_next() {
+            Ok(Some(data)) => {
+                n_sensor += 1;
+                match data {
+                    SensorData::Imu(imu) => mapping.add_imu(&imu),
+                    SensorData::LidarAvia(msg) => mapping.add_lidar_avia(&msg),
+                    SensorData::LidarStandard(msg) => mapping.add_lidar_standard(&msg),
+                }
+                if mapping.has_data() {
+                    if let Some(res) = mapping.run_once() {
+                        results.push(res);
+                        n_frames += 1;
+                    } else {
+                        n_skipped += 1;
+                    }
+                }
+            }
+            Ok(None) => break,
+            Err(_) => {
+                // nothing available right now: keep polling for Ctrl-C / timeout
+                if last_progress.elapsed() >= Duration::from_secs(2) {
+                    last_progress = Instant::now();
+                    println!(
+                        "received {n_sensor} samples, processed {n_frames} frames, skipped {n_skipped}"
+                    );
+                }
+                std::thread::sleep(Duration::from_millis(20));
             }
         }
     }

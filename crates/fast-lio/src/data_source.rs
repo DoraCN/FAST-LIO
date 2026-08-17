@@ -12,8 +12,24 @@ use crate::types::{ImuRaw, SensorData, StandardMsg, StdPointMsg};
 
 /// A data source yields time-ordered raw sensor samples.
 pub trait DataSource {
+    /// Blocking read of the next sample (`None` = end of stream).
     fn next(&mut self) -> Option<SensorData>;
+
+    /// Non-blocking read of the next sample. Returns:
+    /// - `Some(sample)` if one is immediately available,
+    /// - `None` if the stream has ended,
+    /// - `Err(NonBlocking)` if nothing is available right now.
+    ///
+    /// The default implementation falls back to a blocking `next()`. Live
+    /// sources override it with `try_recv` so a driver loop can poll for
+    /// Ctrl-C / timeout while streaming.
+    fn try_next(&mut self) -> Result<Option<SensorData>, NonBlocking> {
+        Ok(self.next())
+    }
 }
+
+/// Marker for [`DataSource::try_next`] when no sample is available yet.
+pub struct NonBlocking;
 
 /// Parameters of the synthetic scenario.
 #[derive(Clone, Debug)]
