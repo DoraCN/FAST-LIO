@@ -95,13 +95,21 @@ pub fn astar(
     // Start AND goal may sit on stray map noise / an inflated cell: snap to
     // the nearest free cell (BFS, ~1 m) so planning still works. This mirrors
     // the reference nav behaviour.
-    let start_cell = snap_to_free(grid, start_cell, infl, ((1.0 / res).ceil() as usize).max(4))
-        .unwrap_or(start_cell);
-    let goal_cell = snap_to_free(grid, goal_cell, infl, ((1.0 / res).ceil() as usize).max(4))
-        .unwrap_or(goal_cell);
-    if !traversable(grid, start_cell, infl) || !traversable(grid, goal_cell, infl) {
+    let snap_max = ((1.0 / res).ceil() as usize).max(4);
+    let start_snapped = snap_to_free(grid, start_cell, infl, snap_max).unwrap_or(start_cell);
+    let goal_snapped = snap_to_free(grid, goal_cell, infl, snap_max).unwrap_or(goal_cell);
+    if !traversable(grid, start_snapped, infl) || !traversable(grid, goal_snapped, infl) {
+        eprintln!(
+            "astar: start({:.2},{:.2})->({},{}) trav={} goal({:.2},{:.2})->({},{}) trav={} (res={res} snap_max={snap_max})",
+            start.x, start.y, start_cell.0, start_cell.1,
+            traversable(grid, start_snapped, infl),
+            goal.x, goal.y, goal_cell.0, goal_cell.1,
+            traversable(grid, goal_snapped, infl),
+        );
         return None;
     }
+    let start_cell = start_snapped;
+    let goal_cell = goal_snapped;
 
     let h = |c: (i64, i64)| -> f64 {
         let dx = (c.0 - goal_cell.0) as f64;
@@ -128,6 +136,10 @@ pub fn astar(
         }
         expansions += 1;
         if expansions > opts.max_expansions {
+            eprintln!(
+                "astar: exceeded {} expansions from ({},{}) to ({},{})",
+                opts.max_expansions, start_cell.0, start_cell.1, goal_cell.0, goal_cell.1
+            );
             return None;
         }
         let cur_g = g_score[&node.cell];
