@@ -207,7 +207,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut grid = GridMap::load_pgm(&pgm, res, ox, oy).map_err(|e| e.to_string())?;
     // inflate obstacles for the A* costmap (avoid walls)
     grid.inflate(args.radius + 0.1);
-    println!("map: {pgm} res={res} origin=({ox},{oy}) inflated {:.2} m", args.radius + 0.1);
+    let (w, h) = grid.dims();
+    let p = grid.params();
+    println!(
+        "map: {pgm} res={res} dims={w}x{h} world x:[{:.2},{:.2}] y:[{:.2},{:.2}] inflated {:.2} m",
+        p.min_x,
+        p.max_x,
+        p.min_y,
+        p.max_y,
+        args.radius + 0.1
+    );
 
     let task: Vec<TaskWaypoint> = load_task(&args.task)?;
     println!("task: {} waypoints from {}", task.len(), args.task);

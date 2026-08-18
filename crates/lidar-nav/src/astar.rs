@@ -90,6 +90,17 @@ pub fn astar(
     let start_cell = grid.world_to_cell(start.x, start.y);
     let goal_cell = grid.world_to_cell(goal.x, goal.y);
     if !grid.in_bounds(start_cell.0, start_cell.1) || !grid.in_bounds(goal_cell.0, goal_cell.1) {
+        let (w, h) = grid.dims();
+        eprintln!(
+            "astar: OUT OF MAP start({:.2},{:.2})->cell({},{}) in={} goal({:.2},{:.2})->cell({},{}) in={} (dims {}x{}, origin=({:.2},{:.2}), res={res})",
+            start.x, start.y, start_cell.0, start_cell.1,
+            grid.in_bounds(start_cell.0, start_cell.1),
+            goal.x, goal.y, goal_cell.0, goal_cell.1,
+            grid.in_bounds(goal_cell.0, goal_cell.1),
+            w, h,
+            grid.params().min_x,
+            grid.params().min_y,
+        );
         return None;
     }
     // Start AND goal may sit on stray map noise / an inflated cell: snap to
