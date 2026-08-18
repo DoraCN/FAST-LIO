@@ -205,8 +205,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (res, ox, oy) = parse_yaml(&args.map_yaml)?;
     let pgm = args.map_yaml.replace(".yaml", ".pgm");
     let mut grid = GridMap::load_pgm(&pgm, res, ox, oy).map_err(|e| e.to_string())?;
-    // inflate obstacles for the A* costmap (avoid walls)
-    grid.inflate(args.radius + 0.1);
+    // inflate obstacles for the A* costmap (avoid walls); match the reference
+    // nav exactly: inflate by the robot radius with no extra margin
+    grid.inflate(args.radius);
     let (w, h) = grid.dims();
     let p = grid.params();
     println!(
@@ -215,7 +216,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         p.max_x,
         p.min_y,
         p.max_y,
-        args.radius + 0.1
+        args.radius
     );
 
     let task: Vec<TaskWaypoint> = load_task(&args.task)?;
