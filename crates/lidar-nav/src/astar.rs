@@ -95,7 +95,11 @@ pub fn astar(
     if !traversable(grid, goal_cell, infl) {
         return None;
     }
-    // start may sit on a "free" cell inside an inflated zone; allow it
+    // Start (and goal) may sit on stray map noise / an inflated cell: snap to
+    // the nearest free cell (BFS, ~1 m) so planning still works. This mirrors
+    // the reference nav behaviour.
+    let start_cell = snap_to_free(grid, start_cell, infl, ((1.0 / res).ceil() as usize).max(4))
+        .unwrap_or(start_cell);
     if !traversable(grid, start_cell, infl) {
         return None;
     }
@@ -166,6 +170,36 @@ fn traversable(grid: &GridMap, cell: (i64, i64), infl: i64) -> bool {
         }
     }
     true
+}
+
+/// Nearest traversable cell via BFS, within `max_cells` steps. Used so a start
+/// sitting on stray map noise / an inflated cell is snapped to drivable space
+/// (mirrors the reference nav).
+fn snap_to_free(grid: &GridMap, start: (i64, i64), infl: i64, max_cells: usize) -> Option<(i64, i64)> {
+    use std::collections::VecDeque;
+    if traversable(grid, start, infl) {
+        return Some(start);
+    }
+    let mut visited = std::collections::HashSet::new();
+    let mut q = VecDeque::new();
+    q.push_back((start, 0usize));
+    visited.insert(start);
+    while let Some((cell, depth)) = q.pop_front() {
+        if depth >= max_cells {
+            continue;
+        }
+        for (dc, dr) in NEIGHBORS {
+            let nc = (cell.0 + dc, cell.1 + dr);
+            if !grid.in_bounds(nc.0, nc.1) || !visited.insert(nc) {
+                continue;
+            }
+            if traversable(grid, nc, infl) {
+                return Some(nc);
+            }
+            q.push_back((nc, depth + 1));
+        }
+    }
+    None
 }
 
 /// Walk `came_from` backwards to build the waypoint list.
@@ -274,6 +308,39 @@ mod tests {
             Waypoint { x: 0.0, y: 0.0 },
             Waypoint { x: 3.0, y: 3.0 },
             &AStarOptions::default(),
+        );
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn start_on_noise_snaps_to_free() {
+        let mut grid = empty_grid();
+        // stray noise at the start position
+        grid.mark_occupied(&[[0.0, 0.0, 0.0]]);
+        let path = astar(
+            &grid,
+            Waypoint { x: 0.0, y: 0.0 },
+            Waypoint { x: 5.0, y: 5.0 },
+            &AStarOptions { inflation: 0.0, ..Default::default() },
+        )
+        .expect("snapped start should still plan");
+        assert!(path.len() >= 2);
+    }
+
+    #[test]
+    fn start_fully_blocked_returns_none() {
+        let mut grid = empty_grid();
+        // block well beyond the snap radius (4 cells @ res 1.0) so the start
+        // has no free cell to snap to
+        let blob: Vec<Point3> = (-5..=5)
+            .flat_map(|i| (-5..=5).map(move |j| [i as f64, j as f64, 0.0]))
+            .collect();
+        grid.mark_occupied(&blob);
+        let res = astar(
+            &grid,
+            Waypoint { x: 0.0, y: 0.0 },
+            Waypoint { x: 5.0, y: 5.0 },
+            &AStarOptions { inflation: 0.0, ..Default::default() },
         );
         assert!(res.is_none());
     }
