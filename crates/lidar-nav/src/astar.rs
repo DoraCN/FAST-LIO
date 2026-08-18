@@ -143,7 +143,7 @@ pub fn astar(
     let mut expansions = 0usize;
     while let Some(node) = open.pop() {
         if node.cell == goal_cell {
-            return Some(reconstruct(came_from, start_cell, goal_cell, grid));
+            return Some(postprocess(grid, &came_from, start_cell, goal_cell, res));
         }
         expansions += 1;
         if expansions > opts.max_expansions {
@@ -234,12 +234,20 @@ fn snap_to_free(grid: &GridMap, start: (i64, i64), infl: i64, max_cells: usize) 
     None
 }
 
-/// Walk `came_from` backwards to build the waypoint list.
-fn reconstruct(
-    came_from: HashMap<(i64, i64), (i64, i64)>,
+/// Walk `came_from` backwards to build the cell list, then post-process it:
+/// 1. `center_path` — pull each intermediate cell toward the corridor midline
+///    (max clearance from obstacles) via normal-direction hill climbing,
+/// 2. `smooth` — moving-average smoothing of the world path,
+/// 3. `resample` — re-sample so consecutive waypoints are ≤ `max_step` apart.
+///
+/// This mirrors the reference nav (`planner.rs`) so the driven route runs down
+/// the middle of corridors instead of hugging the inflated wall edge.
+fn postprocess(
+    grid: &GridMap,
+    came_from: &HashMap<(i64, i64), (i64, i64)>,
     start: (i64, i64),
     goal: (i64, i64),
-    grid: &GridMap,
+    res: f64,
 ) -> Vec<Waypoint> {
     let mut cells = vec![goal];
     let mut cur = goal;
@@ -251,13 +259,142 @@ fn reconstruct(
         cur = prev;
     }
     cells.reverse();
-    cells
+    if cells.len() < 3 {
+        return cells
+            .into_iter()
+            .map(|(c, r)| {
+                let w = grid.cell_to_world(c, r);
+                Waypoint { x: w[0], y: w[1] }
+            })
+            .collect();
+    }
+
+    // distance from every cell to the nearest blocked cell (multi-source BFS)
+    let dist = distance_field(grid);
+    center_path(&mut cells, grid, &dist, 20);
+
+    let mut path: Vec<Waypoint> = cells
         .into_iter()
         .map(|(c, r)| {
             let w = grid.cell_to_world(c, r);
             Waypoint { x: w[0], y: w[1] }
         })
-        .collect()
+        .collect();
+    smooth(&mut path, 5, 12);
+    resample(&path, (res * 3.0).max(0.05))
+}
+
+/// Approximate distance (m) from every traversable cell to the nearest blocked
+/// cell, via multi-source 8-connected BFS (diagonal steps cost sqrt(2)*res).
+fn distance_field(grid: &GridMap) -> HashMap<(i64, i64), f32> {
+    use std::collections::VecDeque;
+    let res = grid.params().resolution as f32;
+    let mut dist: HashMap<(i64, i64), f32> = HashMap::new();
+    let mut q = VecDeque::new();
+    for ((c, r), _) in grid.iter_cells() {
+        if grid.occupancy(c, r) > 0.6 {
+            dist.insert((c, r), 0.0);
+            q.push_back((c, r));
+        }
+    }
+    while let Some((c, r)) = q.pop_front() {
+        let d = dist[&(c, r)];
+        for (dc, dr) in NEIGHBORS {
+            let nc = (c + dc, r + dr);
+            if !grid.in_bounds(nc.0, nc.1) {
+                continue;
+            }
+            let step = if dc != 0 && dr != 0 {
+                std::f32::consts::SQRT_2 * res
+            } else {
+                res
+            };
+            let nd = d + step;
+            if nd < dist.get(&nc).copied().unwrap_or(f32::MAX) {
+                dist.insert(nc, nd);
+                q.push_back(nc);
+            }
+        }
+    }
+    dist
+}
+
+/// Hill-climb each intermediate path cell along the path *normal* (sideways,
+/// never along the path) toward the local clearance maximum, staying
+/// 8-connected to its neighbours so the path cannot tangle.
+fn center_path(cells: &mut [(i64, i64)], grid: &GridMap, dist: &HashMap<(i64, i64), f32>, max_steps: usize) {
+    for pos in 1..cells.len() - 1 {
+        let (c, r) = cells[pos];
+        let (pc, pr) = cells[pos - 1];
+        let (nxc, nxr) = cells[pos + 1];
+        let dx = (nxc - pc) as f64;
+        let dy = (nxr - pr) as f64;
+        let len = (dx * dx + dy * dy).sqrt().max(1e-6);
+        let (nx, ny) = (-dy / len, dx / len);
+        let mut best = dist.get(&(c, r)).copied().unwrap_or(0.0);
+        let mut best_c = c;
+        let mut best_r = r;
+        for step in 1..=max_steps {
+            for sign in [-1.0f64, 1.0] {
+                let nc = (c as f64 + sign * nx * step as f64).round() as i64;
+                let nr = (r as f64 + sign * ny * step as f64).round() as i64;
+                if !grid.in_bounds(nc, nr) {
+                    continue;
+                }
+                let d = dist.get(&(nc, nr)).copied().unwrap_or(0.0);
+                if d > best {
+                    best = d;
+                    best_c = nc;
+                    best_r = nr;
+                }
+            }
+        }
+        cells[pos] = (best_c, best_r);
+    }
+}
+
+/// Moving-average smoothing (window `win`, `iters` passes, endpoints fixed).
+fn smooth(path: &mut [Waypoint], win: usize, iters: usize) {
+    if path.len() < 3 {
+        return;
+    }
+    let half = win / 2;
+    for _ in 0..iters {
+        let next: Vec<Waypoint> = (0..path.len())
+            .map(|i| {
+                if i == 0 || i == path.len() - 1 {
+                    return path[i];
+                }
+                let lo = i.saturating_sub(half);
+                let hi = (i + half + 1).min(path.len());
+                let n = (hi - lo) as f64;
+                let sx: f64 = path[lo..hi].iter().map(|w| w.x).sum();
+                let sy: f64 = path[lo..hi].iter().map(|w| w.y).sum();
+                Waypoint { x: sx / n, y: sy / n }
+            })
+            .collect();
+        path.copy_from_slice(&next);
+    }
+}
+
+/// Re-sample a path so consecutive waypoints are at most `max_step` apart.
+fn resample(path: &[Waypoint], max_step: f64) -> Vec<Waypoint> {
+    if max_step <= 0.0 || path.len() < 2 {
+        return path.to_vec();
+    }
+    let mut out = Vec::with_capacity(path.len() * 2);
+    for w in path.windows(2) {
+        let (x0, y0) = (w[0].x, w[0].y);
+        let (x1, y1) = (w[1].x, w[1].y);
+        let d = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
+        let n = (d / max_step).ceil() as usize;
+        for i in 0..n {
+            let t = i as f64 / n as f64;
+            out.push(Waypoint { x: x0 + t * (x1 - x0), y: y0 + t * (y1 - y0) });
+        }
+    }
+    out.push(*path.last().unwrap());
+    out
 }
 
 #[cfg(test)]

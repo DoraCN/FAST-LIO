@@ -213,7 +213,7 @@ impl<'a> TaskExecutor<'a> {
                     ..Default::default()
                 },
             ) {
-                Some(p) => resample(&p, (self.params.lookahead * 0.5).max(0.1)),
+                Some(p) => p,
                 None => {
                     // unreachable: give up this waypoint
                     eprintln!(
@@ -355,28 +355,6 @@ fn dist(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
     ((x1 - x2).powi(2) + (y1 - y2).powi(2)).sqrt()
 }
 
-/// Re-sample a path so consecutive waypoints are at most `max_step` apart.
-/// Pure pursuit needs a dense enough path to pick a lookahead point ahead of
-/// the robot; A* on a coarse grid can otherwise produce a degenerate path.
-fn resample(path: &[Waypoint], max_step: f64) -> Vec<Waypoint> {
-    if max_step <= 0.0 || path.len() < 2 {
-        return path.to_vec();
-    }
-    let mut out = Vec::with_capacity(path.len() * 2);
-    for w in path.windows(2) {
-        let (x0, y0) = (w[0].x, w[0].y);
-        let (x1, y1) = (w[1].x, w[1].y);
-        let d = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
-        let n = (d / max_step).ceil() as usize;
-        for i in 0..n {
-            let t = i as f64 / n as f64;
-            out.push(Waypoint { x: x0 + t * (x1 - x0), y: y0 + t * (y1 - y0) });
-        }
-    }
-    out.push(*path.last().unwrap());
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,7 +405,7 @@ mod tests {
 
     fn task_map() -> GridMap {
         GridMap::new(lidar_map::GridMapParams {
-            resolution: 1.0,
+            resolution: 0.1,
             min_x: -20.0,
             min_y: -20.0,
             max_x: 20.0,
