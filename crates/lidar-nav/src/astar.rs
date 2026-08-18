@@ -92,15 +92,14 @@ pub fn astar(
     if !grid.in_bounds(start_cell.0, start_cell.1) || !grid.in_bounds(goal_cell.0, goal_cell.1) {
         return None;
     }
-    if !traversable(grid, goal_cell, infl) {
-        return None;
-    }
-    // Start (and goal) may sit on stray map noise / an inflated cell: snap to
+    // Start AND goal may sit on stray map noise / an inflated cell: snap to
     // the nearest free cell (BFS, ~1 m) so planning still works. This mirrors
     // the reference nav behaviour.
     let start_cell = snap_to_free(grid, start_cell, infl, ((1.0 / res).ceil() as usize).max(4))
         .unwrap_or(start_cell);
-    if !traversable(grid, start_cell, infl) {
+    let goal_cell = snap_to_free(grid, goal_cell, infl, ((1.0 / res).ceil() as usize).max(4))
+        .unwrap_or(goal_cell);
+    if !traversable(grid, start_cell, infl) || !traversable(grid, goal_cell, infl) {
         return None;
     }
 
@@ -286,8 +285,9 @@ mod tests {
     #[test]
     fn unreachable_goal_returns_none() {
         let mut grid = empty_grid();
-        let blob: Vec<Point3> = (-8..8)
-            .flat_map(|i| (-8..8).map(move |j| [i as f64, j as f64, 0.0]))
+        // fill the entire grid with obstacles: no free cell to snap to
+        let blob: Vec<Point3> = (-9..9)
+            .flat_map(|i| (-9..9).map(move |j| [i as f64, j as f64, 0.0]))
             .collect();
         grid.mark_occupied(&blob);
         let res = astar(
@@ -300,8 +300,10 @@ mod tests {
     }
 
     #[test]
-    fn goal_on_obstacle_returns_none() {
+    fn goal_on_obstacle_snaps_to_free() {
         let mut grid = empty_grid();
+        // single-point obstacle at the goal: it snaps to a neighbouring free
+        // cell and plans around it
         grid.mark_occupied(&[[3.0, 3.0, 0.0]]);
         let res = astar(
             &grid,
@@ -309,7 +311,7 @@ mod tests {
             Waypoint { x: 3.0, y: 3.0 },
             &AStarOptions::default(),
         );
-        assert!(res.is_none());
+        assert!(res.is_some(), "goal on a single obstacle cell should snap to a free neighbour");
     }
 
     #[test]

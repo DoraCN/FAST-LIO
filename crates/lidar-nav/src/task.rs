@@ -216,6 +216,15 @@ impl<'a> TaskExecutor<'a> {
                 Some(p) => resample(&p, (self.params.lookahead * 0.5).max(0.1)),
                 None => {
                     // unreachable: give up this waypoint
+                    eprintln!(
+                        "nav: NO PATH to waypoint {}/{} ({:.2},{:.2}) from ({:.2},{:.2}) — skipping",
+                        self.idx + 1,
+                        self.task.len(),
+                        wp.x,
+                        wp.y,
+                        x,
+                        y
+                    );
                     self.phase = Phase::Done;
                     self.advance();
                     return self.step(pose, now);

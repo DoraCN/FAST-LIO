@@ -211,6 +211,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let task: Vec<TaskWaypoint> = load_task(&args.task)?;
     println!("task: {} waypoints from {}", task.len(), args.task);
+    for (i, wp) in task.iter().enumerate() {
+        let (c, r) = grid.world_to_cell(wp.x, wp.y);
+        let inside = grid.in_bounds(c, r);
+        println!(
+            "  {}: ({:.2}, {:.2}) yaw={} dwell={}s {}",
+            i,
+            wp.x,
+            wp.y,
+            wp.yaw_deg.map_or("--".into(), |y| format!("{y:.0}°")),
+            wp.dwell_s,
+            if inside { "" } else { "  <-- OUTSIDE MAP" }
+        );
+    }
 
     let task_params = TaskParams {
         lookahead: args.lookahead,
