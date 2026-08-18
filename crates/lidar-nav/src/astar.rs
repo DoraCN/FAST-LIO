@@ -175,6 +175,16 @@ pub fn astar(
             }
         }
     }
+    eprintln!(
+        "astar: OPEN EMPTY — no path from ({},{}) to ({},{}) after {} expansions (grid {}x{})",
+        start_cell.0,
+        start_cell.1,
+        goal_cell.0,
+        goal_cell.1,
+        expansions,
+        grid.dims().0,
+        grid.dims().1,
+    );
     None
 }
 
