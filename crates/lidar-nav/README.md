@@ -12,6 +12,8 @@ Path planning and navigation on top of the map produced by
   feasible velocities inside the dynamic window, simulates short trajectories,
   and returns a `(linear, angular)` control command scored by goal progress,
   clearance and speed.
+- **`task`** — multi-waypoint navigation: A* plan → Pure Pursuit follow → face
+  the goal heading → dwell → next waypoint, driven by a text file.
 
 ## Usage
 
@@ -62,6 +64,23 @@ Plan a global path on a grid produced by `lidar-map`:
 ```sh
 cargo run --release -p lidar-nav --example plan -- \
     --pgm map.pgm --yaml map.yaml --start 0 0 --goal 10 5
+```
+
+### Multi-waypoint task
+
+Task file (`task.txt`) — one waypoint per line:
+
+```text
+# x y [yaw_deg] [dwell_sec]
+2.0 1.5 90 5
+8.0 -2.0 0
+```
+
+Simulate the sequence (drive → face heading → dwell → next) on a map:
+
+```sh
+cargo run --release -p lidar-nav --example navigate -- \
+    --pgm map.pgm --yaml map.yaml --task task.txt --start 0 0
 ```
 
 ## License

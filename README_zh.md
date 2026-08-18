@@ -85,7 +85,8 @@ fast-lio/
     │       └── hesai.rs       #   机械式 LiDAR（开发中）
     ├── lidar-map/             # 占据栅格 + 体素地图（GridMap / VoxelMap）
     ├── lidar-nav/             # 路径规划（A*）+ 局部避障（DWA）
-    └── fast-lio-app/          # 离线/实时驱动二进制（不发布）
+    ├── fast-lio-app/          # 离线/实时驱动二进制（不发布）
+    └── nav-app/               # 完整导航应用（底盘 + 任务文件）
 ```
 
 算法核心（`fast-lio`）**与厂商 SDK 完全解耦**：它只消费归一化的 [`SensorData`](crates/fast-lio/src/types.rs)。所有硬件访问都位于 `fast-lio-driver` 中，其适配器将各品牌原始输出翻译为该格式。依赖方向：`fast-lio-app → fast-lio-driver → fast-lio`。

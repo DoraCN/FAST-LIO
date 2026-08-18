@@ -1,0 +1,15 @@
+[package]
+name = "nav-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Full robot navigation: fast-lio odometry + lidar-map grid + lidar-nav A*/task, driving the chassis"
+publish = false
+
+[dependencies]
+fast-lio = { path = "../fast-lio", version = "0.1" }
+fast-lio-driver = { path = "../fast-lio-driver", version = "0.1", features = ["livox-sdk2"] }
+lidar-map = { path = "../lidar-map", version = "0.1" }
+lidar-nav = { path = "../lidar-nav", version = "0.1" }
+chassis-driver = { git = "https://github.com/DoraCN/chassis-driver.git", branch = "main" }
+ctrlc = "3"

@@ -207,6 +207,36 @@ impl GridMap {
         self.cells.clear();
     }
 
+    /// Inflate occupied cells by `radius` meters: every cell within `radius`
+    /// of an occupied cell is also marked occupied. Use this to give the
+    /// planner a safety margin around obstacles (the robot keeps `radius`
+    /// clearance).
+    pub fn inflate(&mut self, radius: f64) {
+        if radius <= 0.0 {
+            return;
+        }
+        let res = self.params.resolution;
+        let infl = (radius / res).ceil() as i64;
+        let occ: Vec<(i64, i64)> = self
+            .cells
+            .iter()
+            .filter(|&(_, &l)| l > 0.0)
+            .map(|(&(c, r), _)| (c, r))
+            .collect();
+        for (c, r) in occ {
+            for dr in -infl..=infl {
+                for dc in -infl..=infl {
+                    if (dc * dc + dr * dr) as f64 > (infl * infl) as f64 {
+                        continue;
+                    }
+                    if self.in_bounds(c + dc, r + dr) {
+                        self.apply_delta(c + dc, r + dr, self.params.occ_log_odds);
+                    }
+                }
+            }
+        }
+    }
+
     /// Grid dimensions in cells.
     pub fn dims(&self) -> (usize, usize) {
         let ncols = ((self.params.max_x - self.params.min_x) / self.params.resolution) as usize;
@@ -413,5 +443,18 @@ mod tests {
         assert!(g.cell_count() > 0);
         g.clear();
         assert_eq!(g.cell_count(), 0);
+    }
+
+    #[test]
+    fn inflate_expands_occupied() {
+        let mut g = GridMap::new(params());
+        g.mark_occupied(&[[0.0, 0.0, 0.0]]);
+        let before = g.cell_count();
+        g.inflate(0.25);
+        assert!(g.cell_count() > before, "inflation should add cells");
+        // a cell ~0.2m away becomes occupied
+        assert!(g.occupancy_at(0.2, 0.0) > 0.6);
+        // a far cell stays unknown
+        assert!((g.occupancy_at(3.0, 3.0) - 0.5).abs() < 1e-9);
     }
 }

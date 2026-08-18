@@ -85,7 +85,8 @@ fast-lio/
     │       └── hesai.rs       #   spinning LiDAR (WIP)
     ├── lidar-map/             # occupancy grid + voxel map (GridMap / VoxelMap)
     ├── lidar-nav/             # path planning (A*) + local avoidance (DWA)
-    └── fast-lio-app/          # offline/live driver binary (not published)
+    ├── fast-lio-app/          # offline/live driver binary (not published)
+    └── nav-app/               # full robot navigation app (chassis + task file)
 ```
 
 The algorithm core (`fast-lio`) is **vendor-SDK-free**: it only consumes the

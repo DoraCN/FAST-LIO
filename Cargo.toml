@@ -6,6 +6,7 @@ members = [
     "crates/lidar-map",
     "crates/lidar-nav",
     "crates/fast-lio-app",
+    "crates/nav-app",
 ]
 
 [workspace.package]
